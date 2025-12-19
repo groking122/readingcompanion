@@ -15,6 +15,8 @@ interface ReaderSettingsProps {
   paragraphSpacing?: number // in rem
   theme?: "light" | "sepia" | "dark" | "paper"
   distractionFree?: boolean
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
   onFontSizeChange: (size: number) => void
   onFontFamilyChange: (family: string) => void
   onLineHeightChange: (height: number) => void
@@ -40,6 +42,8 @@ export function ReaderSettings({
   paragraphSpacing = DEFAULT_PARAGRAPH_SPACING,
   theme = DEFAULT_THEME,
   distractionFree = false,
+  isOpen: controlledIsOpen,
+  onOpenChange,
   onFontSizeChange,
   onFontFamilyChange,
   onLineHeightChange,
@@ -49,7 +53,15 @@ export function ReaderSettings({
   onDistractionFreeChange,
   onReset,
 }: ReaderSettingsProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen
+  const setIsOpen = (open: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(open)
+    } else {
+      setInternalIsOpen(open)
+    }
+  }
 
   const increaseFontSize = () => {
     onFontSizeChange(Math.min(fontSize + 2, 24))

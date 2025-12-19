@@ -1,10 +1,11 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useMemo } from "react"
-import { useParams, useSearchParams } from "next/navigation"
+import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Loader2, Settings2, X, Menu, BookOpen } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Loader2, Settings2, X, Menu, BookOpen, Keyboard } from "lucide-react"
 import { ReaderSettings } from "@/components/reader-settings"
 import { EpubReader } from "@/components/epub-reader"
 import { TocDrawer, type TocItem } from "@/components/toc-drawer"
@@ -165,26 +166,137 @@ export default function ReaderPage() {
   const [tocOpen, setTocOpen] = useState(false)
   const [readingProgress, setReadingProgress] = useState(0)
   const [currentChapter, setCurrentChapter] = useState<string>("")
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const router = useRouter()
 
-  // Esc key handler for popover dismissal
+  // Helper function to normalize text (trim, collapse whitespace)
+  const normalizeText = (text: string): string => {
+    return text.trim().replace(/\s+/g, " ")
+  }
+
+  // Helper function to count words
+  const countWords = (text: string): number => {
+    const normalized = normalizeText(text)
+    if (!normalized) return 0
+    return normalized.split(/\s+/).filter(word => word.length > 0).length
+  }
+
+  // Helper function to check if selection is a phrase (2-6 words)
+  const isPhrase = (text: string): boolean => {
+    const wordCount = countWords(text)
+    return wordCount >= 2 && wordCount <= 6
+  }
+
+  // Keyboard shortcuts handler
   useEffect(() => {
-    if (!popoverOpen) return
-
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
-      e.preventDefault()
-      e.stopPropagation()
-      setPopoverOpen(false)
-      setSelectedText("")
-      setTranslation("")
-      setAlternativeTranslations([])
-      setSavedWordId(null)
+      // Don't intercept if user is typing in an input/textarea/contenteditable
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable ||
+        target.closest("[contenteditable]")
+      ) {
+        return
+      }
+
+      // Don't intercept if a dialog/modal is open (except shortcuts dialog)
+      if (target.closest('[role="dialog"]') && !target.closest('[data-shortcuts-dialog]')) {
+        return
+      }
+
+      // Esc: Close popover or shortcuts dialog
+      if (e.key === "Escape") {
+        if (shortcutsOpen) {
+          e.preventDefault()
+          setShortcutsOpen(false)
+          return
+        }
+        if (popoverOpen) {
+          e.preventDefault()
+          e.stopPropagation()
+          setPopoverOpen(false)
+          setSelectedText("")
+          setTranslation("")
+          setAlternativeTranslations([])
+          setSavedWordId(null)
+          return
+        }
+        if (tocOpen) {
+          e.preventDefault()
+          setTocOpen(false)
+          return
+        }
+        if (settingsOpen) {
+          e.preventDefault()
+          setSettingsOpen(false)
+          return
+        }
+        return
+      }
+
+      // Only handle shortcuts when popover is open (S, K) or when not in distraction-free mode
+      if (popoverOpen) {
+        // S: Save selection
+        if (e.key === "s" || e.key === "S") {
+          if (selectedText && translation && !saving && !savedWordId) {
+            e.preventDefault()
+            handleSaveWord()
+            return
+          }
+        }
+
+        // K: Mark known / dismiss without saving
+        if (e.key === "k" || e.key === "K") {
+          e.preventDefault()
+          setPopoverOpen(false)
+          setSelectedText("")
+          setTranslation("")
+          setAlternativeTranslations([])
+          setSavedWordId(null)
+          return
+        }
+      }
+
+      // Shortcuts when not in distraction-free mode
+      if (!distractionFree) {
+        // A: Open settings drawer
+        if (e.key === "a" || e.key === "A") {
+          e.preventDefault()
+          setSettingsOpen(true)
+          return
+        }
+
+        // C: Open Contents (TOC)
+        if (e.key === "c" || e.key === "C") {
+          if (book?.type === "epub") {
+            e.preventDefault()
+            setTocOpen(true)
+            return
+          }
+        }
+
+        // R: Go to Review
+        if (e.key === "r" || e.key === "R") {
+          e.preventDefault()
+          router.push("/review")
+          return
+        }
+
+        // ?: Open shortcuts help
+        if (e.key === "?") {
+          e.preventDefault()
+          setShortcutsOpen(true)
+          return
+        }
+      }
     }
 
-    // capture=true helps when embedded viewers/iframes steal bubbling events
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [popoverOpen])
+  }, [popoverOpen, selectedText, translation, saving, savedWordId, distractionFree, book?.type, tocOpen, settingsOpen, shortcutsOpen, router])
 
   // Keyboard focus management
   useEffect(() => {
@@ -447,6 +559,14 @@ export default function ReaderPage() {
       contextText = context
     }
 
+    // Validate phrase length (2-6 words)
+    const wordCount = countWords(selectedText)
+    if (wordCount > 6) {
+      // Show error message for too long selection
+      alert("Please select a shorter phrase (2-6 words)")
+      return
+    }
+
     if (!selectedText || selectedText.length === 0 || selectedText.length > 100) {
       return
     }
@@ -667,6 +787,8 @@ export default function ReaderPage() {
             paragraphSpacing={paragraphSpacing}
             theme={theme}
             distractionFree={distractionFree}
+            isOpen={settingsOpen}
+            onOpenChange={setSettingsOpen}
             onFontSizeChange={setFontSize}
             onFontFamilyChange={setFontFamily}
             onLineHeightChange={setLineHeight}
@@ -1032,7 +1154,7 @@ export default function ReaderPage() {
                     disabled={saving || !translation || !!savedWordId}
                     className="flex-1 h-12 min-h-[48px]"
                   >
-                    {savedWordId ? "Saved ✓" : saving ? "Saving..." : "Save Word"}
+                    {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase(selectedText) ? "Save Phrase" : "Save Word"}
                   </Button>
                   {savedWordId && (
                     <Button
@@ -1090,7 +1212,7 @@ export default function ReaderPage() {
                 onClick={handleSaveWord}
                 disabled={saving || !translation || !!savedWordId}
               >
-                {savedWordId ? "Saved ✓" : saving ? "Saving..." : "Save"}
+                {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase(selectedText) ? "Save Phrase" : "Save"}
               </Button>
               {savedWordId && (
                 <Button 
@@ -1133,6 +1255,59 @@ export default function ReaderPage() {
             </div>
           </div>
         )}
+
+        {/* Keyboard Shortcuts Help Dialog */}
+        <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+          <DialogContent data-shortcuts-dialog className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Keyboard className="h-5 w-5" />
+                Keyboard Shortcuts
+              </DialogTitle>
+              <DialogDescription>
+                Speed up your reading workflow with these shortcuts
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Reading</h3>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Save selection</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">S</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Mark known / Dismiss</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">K</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Open settings</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">A</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Open Contents (TOC)</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">C</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Go to Review</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">R</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Close popover / dialog</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">Esc</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Show shortcuts</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">?</kbd>
+                  </div>
+                </div>
+              </div>
+              <div className="pt-2 border-t text-xs text-muted-foreground">
+                <p>Shortcuts only work when not typing in input fields.</p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
