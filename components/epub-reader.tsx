@@ -461,6 +461,12 @@ export function EpubReader({
 
   return (
     <div ref={viewerRef} className="w-full h-full" style={{ position: "relative" }}>
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading EPUB...</p>
+        </div>
+      )}
       <ReactReader
         url={url}
         location={location}
@@ -501,8 +507,9 @@ export function EpubReader({
           requestMethod: requestMethod,
         } as any}
         loadingView={
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin" />
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Loading EPUB...</p>
           </div>
         }
       />

@@ -9,6 +9,7 @@ import { Loader2, Settings2, X, Menu, BookOpen, Keyboard } from "lucide-react"
 import { ReaderSettings } from "@/components/reader-settings"
 import { EpubReader } from "@/components/epub-reader"
 import { TocDrawer, type TocItem } from "@/components/toc-drawer"
+import { TranslationDrawer } from "@/components/translation-drawer"
 
 // Component to highlight search term in text content
 function SearchHighlight({ searchTerm }: { searchTerm: string }) {
@@ -740,8 +741,9 @@ export default function ReaderPage() {
   // Early returns
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading book...</p>
       </div>
     )
   }
@@ -1038,17 +1040,54 @@ export default function ReaderPage() {
                 }}
                 currentLocation={typeof currentLocation === 'string' ? currentLocation : undefined}
               />
+
+              {/* Translation Drawer - Mobile & Desktop */}
+              <TranslationDrawer
+                isOpen={popoverOpen}
+                onClose={() => {
+                  setPopoverOpen(false)
+                  setSelectedText("")
+                  setTranslation("")
+                  setAlternativeTranslations([])
+                  setSavedWordId(null)
+                }}
+                selectedText={selectedText}
+                translation={translation}
+                translating={translating}
+                alternativeTranslations={alternativeTranslations}
+                saving={saving}
+                savedWordId={savedWordId}
+                isPhrase={isPhrase(selectedText)}
+                onSave={handleSaveWord}
+                onUndo={async () => {
+                  if (savedWordId) {
+                    try {
+                      await fetch(`/api/vocabulary/${savedWordId}`, {
+                        method: "DELETE",
+                      })
+                      setPopoverOpen(false)
+                      setSelectedText("")
+                      setTranslation("")
+                      setAlternativeTranslations([])
+                      setSavedWordId(null)
+                    } catch (error) {
+                      console.error("Failed to undo save:", error)
+                    }
+                  }
+                }}
+              />
             </div>
           ) : (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Loading EPUB...</p>
             </div>
           )
         ) : book.content ? (
           <>
             <div
               id="book-content"
-              className={`reader-content-wrapper ${distractionFree ? "py-12 px-4 md:px-8 lg:px-16" : "p-4 sm:p-8"}`}
+              className={`reader-content-wrapper ${distractionFree ? "py-8 px-3 md:py-12 md:px-8 lg:px-16" : "p-3 sm:p-6 md:p-8"}`}
               style={{
                 fontFamily: fontFamily,
                 fontSize: `${fontSize}px`,
@@ -1083,9 +1122,9 @@ export default function ReaderPage() {
         )}
         </div>
 
-        {/* Improved Translation Popover - WCAG Compliant, Dismissible, Persistent */}
+        {/* Improved Translation Popover - Desktop only (mobile uses drawer) */}
         {popoverOpen && (
-          <div className="mt-6 translation-popover">
+          <div className="hidden md:block mt-6 translation-popover">
             <div 
               className="w-full max-w-2xl mx-auto border rounded-lg bg-background shadow-lg p-0 select-none relative"
               role="dialog"
@@ -1203,58 +1242,6 @@ export default function ReaderPage() {
           </div>
         )}
 
-        {/* Mobile Bottom Action Bar - Only show when popover is open */}
-        {popoverOpen && selectedText && (
-          <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden border-t bg-background/95 backdrop-blur shadow-lg">
-            <div className="mx-auto flex max-w-md items-center justify-between gap-2 p-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)]">
-              <Button 
-                className="h-12 flex-1 min-h-[48px]" 
-                onClick={handleSaveWord}
-                disabled={saving || !translation || !!savedWordId}
-              >
-                {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase(selectedText) ? "Save Phrase" : "Save"}
-              </Button>
-              {savedWordId && (
-                <Button 
-                  className="h-12 flex-1 min-h-[48px]" 
-                  variant="secondary"
-                  onClick={async () => {
-                    if (savedWordId) {
-                      try {
-                        await fetch(`/api/vocabulary/${savedWordId}`, {
-                          method: "DELETE",
-                        })
-                        setPopoverOpen(false)
-                        setSelectedText("")
-                        setTranslation("")
-                        setAlternativeTranslations([])
-                        setSavedWordId(null)
-                      } catch (error) {
-                        console.error("Failed to undo save:", error)
-                      }
-                    }
-                  }}
-                >
-                  Undo
-                </Button>
-              )}
-              <Button 
-                className="h-12 w-12 min-w-[48px]" 
-                variant="ghost"
-                onClick={() => {
-                  setPopoverOpen(false)
-                  setSelectedText("")
-                  setTranslation("")
-                  setAlternativeTranslations([])
-                  setSavedWordId(null)
-                }}
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Keyboard Shortcuts Help Dialog */}
         <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
