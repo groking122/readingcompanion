@@ -11,6 +11,9 @@ const staticSuggestedBooks: Array<{ title: string; author: string; category: str
   // { title: "Another Book", author: "Another Author", category: "Self-Improvement" }, // No githubUrl = can't download EPUB
 ]
 
+// Mark route as dynamic to prevent static generation
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     // Fetch uploaded books from database (default books)

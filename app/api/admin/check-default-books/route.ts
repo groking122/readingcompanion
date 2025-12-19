@@ -4,6 +4,9 @@ import { db } from "@/db"
 import { books } from "@/db/schema"
 import { eq } from "drizzle-orm"
 
+// Mark route as dynamic to prevent static generation
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const user = await currentUser()

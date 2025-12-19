@@ -7,7 +7,8 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Parse DATABASE_URL and ensure SSL is configured
-const databaseUrl = process.env.DATABASE_URL;
+// Remove any surrounding quotes that might be in the env var
+const databaseUrl = process.env.DATABASE_URL.trim().replace(/^['"]|['"]$/g, '');
 const client = postgres(databaseUrl, {
   ssl: 'require',
   max: 1, // For scripts, use single connection
