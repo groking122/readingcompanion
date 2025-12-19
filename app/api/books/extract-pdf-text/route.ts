@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import pdfParse from "pdf-parse"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +19,9 @@ export async function POST(request: NextRequest) {
     // Convert base64 to Buffer
     const buffer = Buffer.from(base64Data, "base64")
 
-    // Extract text using pdf-parse
+    // Extract text using pdf-parse (dynamic import for ESM compatibility)
+    const pdfParseModule = await import("pdf-parse")
+    const pdfParse = (pdfParseModule as any).default || pdfParseModule
     const data = await pdfParse(buffer)
 
     return NextResponse.json({

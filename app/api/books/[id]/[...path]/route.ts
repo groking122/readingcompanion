@@ -94,7 +94,7 @@ export async function GET(
         contentType = "image/png"
       }
 
-      return new NextResponse(content, {
+      return new NextResponse(content as any, {
         headers: {
           "Content-Type": contentType,
           "Cache-Control": "public, max-age=31536000, immutable",

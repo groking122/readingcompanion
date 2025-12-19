@@ -12,6 +12,7 @@ interface Book {
   title: string
   createdAt: string
   type: string
+  category?: string
   pdfUrl: string | null
   epubUrl: string | null
   content: string | null

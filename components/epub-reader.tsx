@@ -484,9 +484,9 @@ export function EpubReader({
           rend.themes.select("custom")
         }}
         epubOptions={{
-          openAs: "epub",
+          openAs: "epub" as any,
           requestMethod: requestMethod,
-        }}
+        } as any}
         loadingView={
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin" />
