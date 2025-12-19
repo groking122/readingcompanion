@@ -8,7 +8,11 @@ export default function ProtectedLayout({
   return (
     <>
       <Nav />
-      <main className="container mx-auto px-4 py-8">{children}</main>
+      <main className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-background via-background to-muted/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+          {children}
+        </div>
+      </main>
     </>
   )
 }

@@ -4,9 +4,10 @@ import React, { useState, useEffect, useRef, useMemo } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Loader2 } from "lucide-react"
+import { Loader2, Settings2, X, Menu, BookOpen } from "lucide-react"
 import { ReaderSettings } from "@/components/reader-settings"
 import { EpubReader } from "@/components/epub-reader"
+import { TocDrawer, type TocItem } from "@/components/toc-drawer"
 
 // Component to highlight search term in text content
 function SearchHighlight({ searchTerm }: { searchTerm: string }) {
@@ -144,6 +145,10 @@ export default function ReaderPage() {
   const [fontSize, setFontSize] = useState(16)
   const [fontFamily, setFontFamily] = useState("Inter")
   const [lineHeight, setLineHeight] = useState(1.6)
+  const [maxWidth, setMaxWidth] = useState(66) // ch units - optimal reading width
+  const [paragraphSpacing, setParagraphSpacing] = useState(1.5) // rem
+  const [theme, setTheme] = useState<"light" | "sepia" | "dark" | "paper">("light")
+  const [distractionFree, setDistractionFree] = useState(false)
   const [location, setLocation] = useState<string | number>(0)
   const [epubUrl, setEpubUrl] = useState<string | null>(null)
   const [epubError, setEpubError] = useState<string | null>(null)
@@ -153,6 +158,50 @@ export default function ReaderPage() {
   const [currentPage, setCurrentPage] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [savedWordId, setSavedWordId] = useState<string | null>(null)
+  const lastFocusRef = useRef<HTMLElement | null>(null)
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null)
+  const [toc, setToc] = useState<TocItem[]>([])
+  const [tocOpen, setTocOpen] = useState(false)
+  const [readingProgress, setReadingProgress] = useState(0)
+  const [currentChapter, setCurrentChapter] = useState<string>("")
+
+  // Esc key handler for popover dismissal
+  useEffect(() => {
+    if (!popoverOpen) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      e.stopPropagation()
+      setPopoverOpen(false)
+      setSelectedText("")
+      setTranslation("")
+      setAlternativeTranslations([])
+      setSavedWordId(null)
+    }
+
+    // capture=true helps when embedded viewers/iframes steal bubbling events
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [popoverOpen])
+
+  // Keyboard focus management
+  useEffect(() => {
+    if (popoverOpen) {
+      // Store last focused element
+      lastFocusRef.current = document.activeElement as HTMLElement | null
+      // Focus close button when popover opens
+      requestAnimationFrame(() => {
+        closeBtnRef.current?.focus()
+      })
+    } else {
+      // Restore focus when popover closes
+      requestAnimationFrame(() => {
+        lastFocusRef.current?.focus?.()
+      })
+    }
+  }, [popoverOpen])
 
   useEffect(() => {
     fetchBook()
@@ -407,9 +456,13 @@ export default function ReaderPage() {
       setCurrentLocation(location)
     }
 
+    // Store last focused element before opening popover
+    lastFocusRef.current = document.activeElement as HTMLElement | null
+    
     setSelectedText(selectedText)
     setSelectedContext(contextText || selectedText)
     setTranslating(true)
+    setSavedWordId(null) // Reset saved state
 
     try {
       const res = await fetch("/api/translate", {
@@ -474,7 +527,7 @@ export default function ReaderPage() {
         }
       }
 
-      await fetch("/api/vocabulary", {
+      const response = await fetch("/api/vocabulary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -488,11 +541,23 @@ export default function ReaderPage() {
         }),
       })
 
-      setPopoverOpen(false)
-      setSelectedText("")
-      setTranslation("")
-      setAlternativeTranslations([])
-      setSelectedContext("")
+      if (response.ok) {
+        const data = await response.json()
+        setSavedWordId(data.id)
+        
+        // Show saved feedback - keep popover open briefly to show success
+        // Auto-close after 2 seconds
+        setTimeout(() => {
+          setPopoverOpen(false)
+          setSelectedText("")
+          setTranslation("")
+          setAlternativeTranslations([])
+          setSelectedContext("")
+          setSavedWordId(null)
+        }, 2000)
+      } else {
+        throw new Error("Failed to save word")
+      }
     } catch (error) {
       console.error("Error saving word:", error)
     } finally {
@@ -565,23 +630,71 @@ export default function ReaderPage() {
     return <div className="text-center py-12">Book not found</div>
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">{book.title}</h1>
-        <ReaderSettings
-          fontSize={fontSize}
-          fontFamily={fontFamily}
-          lineHeight={lineHeight}
-          onFontSizeChange={setFontSize}
-          onFontFamilyChange={setFontFamily}
-          onLineHeightChange={setLineHeight}
-        />
-      </div>
+  // Theme background colors
+  const themeStyles = {
+    light: "bg-white",
+    sepia: "bg-[#f4ecd8]",
+    dark: "bg-[#1a1a1a] text-[#e0e0e0]",
+    paper: "bg-[#faf8f3]",
+  }
 
-      <div className="px-8 md:px-16 lg:px-24 xl:px-32">
+  const themeClass = themeStyles[theme]
+
+  return (
+    <div className={`min-h-screen ${distractionFree ? themeClass : "bg-background"}`}>
+      {!distractionFree && (
+        <div className="mb-6 container mx-auto px-4">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold">{book.title}</h1>
+            {book.type === "epub" && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setTocOpen(true)}
+                className="h-12 min-w-[48px]"
+                aria-label="Open table of contents"
+              >
+                <Menu className="h-5 w-5" />
+                <span className="hidden sm:inline ml-2">Contents</span>
+              </Button>
+            )}
+          </div>
+          <ReaderSettings
+            fontSize={fontSize}
+            fontFamily={fontFamily}
+            lineHeight={lineHeight}
+            maxWidth={maxWidth}
+            paragraphSpacing={paragraphSpacing}
+            theme={theme}
+            distractionFree={distractionFree}
+            onFontSizeChange={setFontSize}
+            onFontFamilyChange={setFontFamily}
+            onLineHeightChange={setLineHeight}
+            onMaxWidthChange={setMaxWidth}
+            onParagraphSpacingChange={setParagraphSpacing}
+            onThemeChange={setTheme}
+            onDistractionFreeChange={setDistractionFree}
+          />
+        </div>
+      )}
+
+      {distractionFree && (
+        <div className="fixed top-4 right-4 z-50">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => setDistractionFree(false)}
+            className="h-12 w-12 min-w-[48px] shadow-lg bg-background/90 backdrop-blur-sm"
+            aria-label="Show settings"
+          >
+            <Settings2 className="h-5 w-5" />
+          </Button>
+        </div>
+      )}
+
+      <div className={`${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"}`}>
         <div
-          className="border rounded-lg bg-background min-h-[800px] max-h-[90vh] overflow-auto shadow-sm"
+          className={`${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} overflow-auto ${distractionFree ? "" : "shadow-sm"}`}
           onMouseUp={() => {
             // Only handle mouseup for non-EPUB content
             // EPUB content handles selection via iframe events
@@ -612,6 +725,22 @@ export default function ReaderPage() {
             </div>
           ) : epubUrl ? (
             <div style={{ height: "700px", position: "relative" }}>
+              {/* Progress Bar */}
+              {readingProgress > 0 && (
+                <div className="mb-2 px-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                    <span>{currentChapter || "Reading..."}</span>
+                    <span>{Math.round(readingProgress)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${readingProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              
               <EpubReader
                 url={epubUrl}
                 location={location}
@@ -621,23 +750,52 @@ export default function ReaderPage() {
                     setLocation(loc)
                     setCurrentLocation(loc)
                   }
-                  // Calculate page number from location
+                  
+                  // Calculate progress and chapter
                   if (bookRef.current && renditionRef.current) {
                     try {
                       const locations = bookRef.current.locations
+                      let percentage = 0
+                      
                       if (locations && typeof loc === 'string') {
                         const cfi = loc
-                        const percentage = locations.percentageFromCfi(cfi)
-                        if (percentage !== null && locations.total !== null) {
+                        percentage = locations.percentageFromCfi(cfi) || 0
+                        if (locations.total !== null) {
                           const page = Math.ceil((percentage / 100) * locations.total)
                           setCurrentPage(page)
                         }
                       } else if (typeof loc === 'number') {
-                        // If location is a number (percentage), calculate page directly
+                        percentage = loc
                         const total = bookRef.current.locations?.total
                         if (total) {
                           const page = Math.ceil((loc / 100) * total)
                           setCurrentPage(page)
+                        }
+                      }
+                      
+                      setReadingProgress(percentage)
+                      
+                      // Find current chapter from TOC
+                      if (toc.length > 0 && typeof loc === 'string') {
+                        // Try to find which chapter we're in based on location
+                        const currentLoc = renditionRef.current?.currentLocation()
+                        if (currentLoc?.start?.cfi) {
+                          // Find the chapter that contains this location
+                          for (let i = toc.length - 1; i >= 0; i--) {
+                            const tocItem = toc[i]
+                            if (tocItem.href) {
+                              try {
+                                // Check if current location is after this TOC item
+                                const tocCfi = bookRef.current?.spine?.get(tocItem.href)?.cfi
+                                if (tocCfi && currentLoc.start.cfi >= tocCfi) {
+                                  setCurrentChapter(tocItem.label)
+                                  break
+                                }
+                              } catch (e) {
+                                // Ignore errors in chapter detection
+                              }
+                            }
+                          }
                         }
                       }
                     } catch (e) {
@@ -645,24 +803,46 @@ export default function ReaderPage() {
                       try {
                         const currentLoc = renditionRef.current.currentLocation()
                         if (currentLoc && currentLoc.start && bookRef.current.locations) {
-                          const percentage = bookRef.current.locations.percentageFromCfi(currentLoc.start.cfi)
+                          const percentage = bookRef.current.locations.percentageFromCfi(currentLoc.start.cfi) || 0
+                          setReadingProgress(percentage)
                           if (percentage !== null && bookRef.current.locations.total) {
                             const page = Math.ceil((percentage / 100) * bookRef.current.locations.total)
                             setCurrentPage(page)
                           }
                         }
                       } catch (err) {
-                        console.error("Error calculating page:", err)
+                        console.error("Error calculating progress:", err)
                       }
                     }
                   }
                 }}
-                onRenditionReady={(rend, book) => {
+                onRenditionReady={async (rend, book) => {
                   renditionRef.current = rend
                   if (book) {
                     bookRef.current = book
                   } else if (rend.book) {
                     bookRef.current = rend.book
+                  }
+                  
+                  // Generate locations if not already generated
+                  try {
+                    const bookObj = book || rend.book
+                    if (bookObj && bookObj.locations) {
+                      // Check if locations are already generated
+                      const locationsKey = `epub_locations_${bookId}`
+                      const cachedLocations = localStorage.getItem(locationsKey)
+                      
+                      if (!cachedLocations && bookObj.locations.length() === 0) {
+                        // Generate locations (600-1600 is a good range)
+                        console.log("Generating locations...")
+                        await bookObj.locations.generate(1000)
+                        // Cache the fact that locations are generated
+                        localStorage.setItem(locationsKey, "true")
+                        console.log("Locations generated:", bookObj.locations.length())
+                      }
+                    }
+                  } catch (e) {
+                    console.error("Error generating locations:", e)
                   }
                   
                   // Navigate to initial location if provided
@@ -695,14 +875,13 @@ export default function ReaderPage() {
                     }
                   }
                   
-                  // Search will be handled by the separate useEffect hook
-                  
-                  // Calculate initial page
+                  // Calculate initial page and progress
                   try {
                     const bookObj = book || rend.book
                     const currentLoc = rend.currentLocation()
                     if (currentLoc && currentLoc.start && bookObj?.locations) {
-                      const percentage = bookObj.locations.percentageFromCfi(currentLoc.start.cfi)
+                      const percentage = bookObj.locations.percentageFromCfi(currentLoc.start.cfi) || 0
+                      setReadingProgress(percentage)
                       if (percentage !== null && bookObj.locations.total) {
                         const page = Math.ceil((percentage / 100) * bookObj.locations.total)
                         setCurrentPage(page)
@@ -712,10 +891,30 @@ export default function ReaderPage() {
                     console.error("Error getting initial page:", e)
                   }
                 }}
+                onTocChanged={(tocItems) => {
+                  setToc(tocItems)
+                }}
                 onTextSelected={handleTextSelection}
                 fontSize={fontSize}
                 fontFamily={fontFamily}
                 lineHeight={lineHeight}
+              />
+              
+              {/* TOC Drawer */}
+              <TocDrawer
+                toc={toc}
+                isOpen={tocOpen}
+                onClose={() => setTocOpen(false)}
+                onNavigate={(href) => {
+                  if (renditionRef.current) {
+                    try {
+                      renditionRef.current.display(href)
+                    } catch (e) {
+                      console.error("Error navigating to TOC item:", e)
+                    }
+                  }
+                }}
+                currentLocation={typeof currentLocation === 'string' ? currentLocation : undefined}
               />
             </div>
           ) : (
@@ -727,99 +926,211 @@ export default function ReaderPage() {
           <>
             <div
               id="book-content"
-              className="p-8"
+              className={`reader-content-wrapper ${distractionFree ? "py-12 px-4 md:px-8 lg:px-16" : "p-4 sm:p-8"}`}
               style={{
                 fontFamily: fontFamily,
                 fontSize: `${fontSize}px`,
                 lineHeight: lineHeight,
-              }}
+                maxWidth: `${maxWidth}ch`,
+                marginLeft: "auto",
+                marginRight: "auto",
+                ["--para-gap" as any]: `${paragraphSpacing}rem`,
+              } as React.CSSProperties}
             >
-              <div className="max-w-4xl mx-auto">
-                <div
-                  className="text-justify leading-relaxed select-text"
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {book.content.split("\n\n").map((paragraph, index) => (
-                    <p key={index} className="mb-4">
-                      {paragraph.trim()}
-                    </p>
-                  ))}
-                </div>
-              </div>
+              {/* Reading Mode Layout - Centered, optimal line length */}
+              <article className="text-justify leading-relaxed select-text whitespace-pre-wrap break-words">
+                {book.content.split(/\n\s*\n/).map((paragraph, index) => (
+                  <p 
+                    key={index} 
+                    style={{
+                      marginBottom: `var(--para-gap)`,
+                    }}
+                  >
+                    {paragraph.trim()}
+                  </p>
+                ))}
+              </article>
             </div>
             {searchTerm && <SearchHighlight searchTerm={searchTerm} />}
           </>
         ) : (
           <div className="text-center text-muted-foreground p-12">
-            No content available
+            <p className="mb-2">No content available</p>
+            <p className="text-sm">If this is a scanned PDF, it may not have selectable text.</p>
           </div>
         )}
         </div>
 
+        {/* Improved Translation Popover - WCAG Compliant, Dismissible, Persistent */}
         {popoverOpen && (
-          <div className="mt-6">
-            <div className="w-full max-w-2xl mx-auto border rounded-lg bg-background shadow-sm p-0 select-none">
-            <div className="flex items-center justify-between p-3 border-b bg-muted/50">
-              <span className="text-xs font-medium text-muted-foreground">Translation</span>
-            </div>
-            <div className="space-y-3 p-4">
-              <div>
-                <p className="text-sm font-medium mb-1">Term:</p>
-                <p className="text-sm break-words">{selectedText}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium mb-1">Translation (Greek):</p>
-                {translating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm break-words font-medium">{translation}</p>
-                    {alternativeTranslations.length > 0 && (
-                      <div className="pt-2 border-t">
-                        <p className="text-xs text-muted-foreground mb-2 font-medium">
-                          Alternative translations ({Math.min(alternativeTranslations.length, 3)} shown):
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {alternativeTranslations.slice(0, 3).map((alt, idx) => (
-                            <span
-                              key={idx}
-                              className="text-xs px-2.5 py-1.5 rounded-md bg-muted/80 text-foreground border border-border hover:bg-muted transition-colors text-center"
-                            >
-                              {alt}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2 pt-2">
+          <div className="mt-6 translation-popover">
+            <div 
+              className="w-full max-w-2xl mx-auto border rounded-lg bg-background shadow-lg p-0 select-none relative"
+              role="dialog"
+              aria-label="Translation"
+              aria-modal="true"
+            >
+              {/* Header with close button - WCAG compliant */}
+              <div className="flex items-center justify-between p-3 border-b bg-muted/50">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {savedWordId ? "Saved ✓" : "Translation"}
+                </span>
                 <Button
+                  ref={closeBtnRef}
+                  variant="ghost"
                   size="sm"
-                  onClick={handleSaveWord}
-                  disabled={saving || !translation}
-                  className="flex-1"
-                >
-                  {saving ? "Saving..." : "Save Word"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
                   onClick={() => {
                     setPopoverOpen(false)
                     setSelectedText("")
                     setTranslation("")
+                    setAlternativeTranslations([])
+                    setSavedWordId(null)
                   }}
+                  className="h-8 w-8 min-w-[32px] p-0"
+                  aria-label="Close translation"
                 >
-                  Close
+                  <X className="h-4 w-4" />
                 </Button>
+              </div>
+              
+              <div className="space-y-3 p-4">
+                <div>
+                  <p className="text-sm font-medium mb-1">Term:</p>
+                  <p className="text-sm break-words">{selectedText}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-1">Translation (Greek):</p>
+                  {translating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm break-words font-medium">{translation}</p>
+                      {alternativeTranslations.length > 0 && (
+                        <div className="pt-2 border-t">
+                          <p className="text-xs text-muted-foreground mb-2 font-medium">
+                            Alternative translations ({Math.min(alternativeTranslations.length, 6)} shown):
+                          </p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {alternativeTranslations.slice(0, 6).map((alt, idx) => (
+                              <span
+                                key={idx}
+                                className="text-xs px-2.5 py-1.5 rounded-md bg-muted/80 text-foreground border border-border hover:bg-muted transition-colors text-center"
+                              >
+                                {alt}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    size="lg"
+                    onClick={handleSaveWord}
+                    disabled={saving || !translation || !!savedWordId}
+                    className="flex-1 h-12 min-h-[48px]"
+                  >
+                    {savedWordId ? "Saved ✓" : saving ? "Saving..." : "Save Word"}
+                  </Button>
+                  {savedWordId && (
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={async () => {
+                        if (savedWordId) {
+                          try {
+                            await fetch(`/api/vocabulary/${savedWordId}`, {
+                              method: "DELETE",
+                            })
+                            setPopoverOpen(false)
+                            setSelectedText("")
+                            setTranslation("")
+                            setAlternativeTranslations([])
+                            setSavedWordId(null)
+                          } catch (error) {
+                            console.error("Failed to undo save:", error)
+                          }
+                        }
+                      }}
+                      className="h-12 min-w-[48px]"
+                    >
+                      Undo
+                    </Button>
+                  )}
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => {
+                      setPopoverOpen(false)
+                      setSelectedText("")
+                      setTranslation("")
+                      setAlternativeTranslations([])
+                      setSavedWordId(null)
+                    }}
+                    className="h-12 min-w-[48px]"
+                    aria-label="Close"
+                  >
+                    <X className="h-5 w-5" />
+                    <span className="hidden sm:inline ml-2">Close</span>
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Mobile Bottom Action Bar - Only show when popover is open */}
+        {popoverOpen && selectedText && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden border-t bg-background/95 backdrop-blur shadow-lg">
+            <div className="mx-auto flex max-w-md items-center justify-between gap-2 p-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)]">
+              <Button 
+                className="h-12 flex-1 min-h-[48px]" 
+                onClick={handleSaveWord}
+                disabled={saving || !translation || !!savedWordId}
+              >
+                {savedWordId ? "Saved ✓" : saving ? "Saving..." : "Save"}
+              </Button>
+              {savedWordId && (
+                <Button 
+                  className="h-12 flex-1 min-h-[48px]" 
+                  variant="secondary"
+                  onClick={async () => {
+                    if (savedWordId) {
+                      try {
+                        await fetch(`/api/vocabulary/${savedWordId}`, {
+                          method: "DELETE",
+                        })
+                        setPopoverOpen(false)
+                        setSelectedText("")
+                        setTranslation("")
+                        setAlternativeTranslations([])
+                        setSavedWordId(null)
+                      } catch (error) {
+                        console.error("Failed to undo save:", error)
+                      }
+                    }
+                  }}
+                >
+                  Undo
+                </Button>
+              )}
+              <Button 
+                className="h-12 w-12 min-w-[48px]" 
+                variant="ghost"
+                onClick={() => {
+                  setPopoverOpen(false)
+                  setSelectedText("")
+                  setTranslation("")
+                  setAlternativeTranslations([])
+                  setSavedWordId(null)
+                }}
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         )}
       </div>

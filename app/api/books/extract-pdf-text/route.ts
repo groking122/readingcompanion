@@ -24,14 +24,31 @@ export async function POST(request: NextRequest) {
     const pdfParse = (pdfParseModule as any).default || pdfParseModule
     const data = await pdfParse(buffer)
 
+    const extractedText = data.text.trim()
+    
+    // Check if PDF has no selectable text (scanned PDF)
+    if (!extractedText || extractedText.length < 50) {
+      return NextResponse.json(
+        { 
+          error: "SCANNED_PDF",
+          message: "This PDF appears to be scanned (image-based) and doesn't contain selectable text. OCR (Optical Character Recognition) would be needed to extract text from it. Please upload a PDF with selectable text, or use an EPUB file instead.",
+          numPages: data.numpages 
+        },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json({
-      text: data.text.trim(),
+      text: extractedText,
       numPages: data.numpages,
     })
   } catch (error) {
     console.error("Error extracting PDF text:", error)
     return NextResponse.json(
-      { error: "Failed to extract text from PDF. Please ensure the PDF contains text (not just images)." },
+      { 
+        error: "EXTRACTION_FAILED",
+        message: "Failed to extract text from PDF. This PDF may be scanned (image-based) and require OCR, or it may be corrupted. Please try a different PDF or use an EPUB file instead."
+      },
       { status: 500 }
     )
   }

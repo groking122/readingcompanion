@@ -96,9 +96,9 @@ export default function ReviewPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold mb-2">Review</h1>
+    <div className="max-w-4xl mx-auto px-4 md:px-6">
+      <div className="mb-8 md:mb-12 text-center">
+        <h1 className="text-3xl font-bold mb-3 tracking-tight md:text-4xl">Review</h1>
         <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
           <span>Card {currentIndex + 1} of {flashcards.length}</span>
           <span>•</span>

@@ -46,3 +46,15 @@ export const translationCache = pgTable("translation_cache", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const wishlist = pgTable("wishlist", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  author: text("author"), // Optional author name
+  notes: text("notes"), // Optional notes about why they want to read it
+  priority: integer("priority").default(0), // 0 = normal, 1 = high, -1 = low
+  status: text("status").default("want_to_read"), // 'want_to_read', 'reading', 'completed'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+

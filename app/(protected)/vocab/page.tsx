@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, BookOpen, BookMarked, Calendar, FileText, RotateCcw, ExternalLink, Download, Upload } from "lucide-react"
+import { Search, BookOpen, BookMarked, Calendar, FileText, RotateCcw, ExternalLink, Download, Upload, List, Grid, CheckSquare, Square, Trash2 } from "lucide-react"
 
 interface Flashcard {
   id: string
@@ -42,6 +42,9 @@ export default function VocabPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedBookId, setSelectedBookId] = useState<string>("all")
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards")
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const navigateToWord = (item: Vocabulary) => {
     // Navigate to reader with location/page and search term

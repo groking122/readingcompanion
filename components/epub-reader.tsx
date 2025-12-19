@@ -4,12 +4,19 @@ import { useEffect, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { ReactReader } from "react-reader"
 
+interface TocItem {
+  href: string
+  label: string
+  level?: number
+}
+
 interface EpubReaderProps {
   url: string
   location: string | number
   onLocationChange: (location: string | number) => void
   onRenditionReady?: (rendition: any, book: any) => void
   onTextSelected?: (text: string, cfiRange: string, context?: string) => void
+  onTocChanged?: (toc: TocItem[]) => void
   fontSize?: number
   fontFamily?: string
   lineHeight?: number
@@ -21,6 +28,7 @@ export function EpubReader({
   onLocationChange,
   onRenditionReady,
   onTextSelected,
+  onTocChanged,
   fontSize = 16,
   fontFamily = "Inter",
   lineHeight = 1.6,
@@ -459,6 +467,11 @@ export function EpubReader({
         locationChanged={(loc: string | number) => {
           onLocationChange(loc)
           setLoading(false)
+        }}
+        tocChanged={(toc: TocItem[]) => {
+          if (onTocChanged) {
+            onTocChanged(toc)
+          }
         }}
         getRendition={(rend) => {
           setRendition(rend)

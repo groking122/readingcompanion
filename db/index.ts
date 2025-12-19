@@ -6,6 +6,11 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const client = postgres(process.env.DATABASE_URL);
+// Parse DATABASE_URL and ensure SSL is configured
+const databaseUrl = process.env.DATABASE_URL;
+const client = postgres(databaseUrl, {
+  ssl: 'require',
+  max: 1, // For scripts, use single connection
+});
 export const db = drizzle(client, { schema });
 

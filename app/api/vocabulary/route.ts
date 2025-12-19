@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
       dueAt: sm2Card.dueAt,
     })
 
+    // Return the created vocabulary (already includes id)
     return NextResponse.json(newVocab)
   } catch (error) {
     console.error("Error saving vocabulary:", error)

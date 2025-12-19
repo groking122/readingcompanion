@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Plus, BookOpen, Trash2 } from "lucide-react"
+import { Plus, BookOpen, Trash2, Heart } from "lucide-react"
 import Link from "next/link"
 
 interface Book {
@@ -28,6 +28,7 @@ export default function LibraryPage() {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [addingToWishlist, setAddingToWishlist] = useState<string | null>(null)
 
   useEffect(() => {
     fetchBooks()
@@ -108,7 +109,16 @@ export default function LibraryPage() {
                   setFile(null)
                 }
               } else {
-                alert("Failed to extract text from PDF. Please try again.")
+                const errorData = await extractRes.json().catch(() => ({}))
+                if (errorData.error === "SCANNED_PDF") {
+                  alert(
+                    "This PDF appears to be scanned (image-based) and doesn't contain selectable text.\n\n" +
+                    "OCR (Optical Character Recognition) would be needed to extract text from it.\n\n" +
+                    "Please upload a PDF with selectable text, or use an EPUB file instead."
+                  )
+                } else {
+                  alert(errorData.message || "Failed to extract text from PDF. Please try again.")
+                }
               }
             } else {
               alert("Unsupported file type. Please upload EPUB or PDF.")
@@ -141,6 +151,42 @@ export default function LibraryPage() {
       console.error("Error creating book:", error)
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleAddToWishlist = async (book: Book) => {
+    setAddingToWishlist(book.id)
+    try {
+      const res = await fetch("/api/wishlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: book.title,
+          author: null,
+          notes: `Added from library`,
+          priority: 0,
+          status: "want_to_read",
+        }),
+      })
+      if (res.ok) {
+        // Show success feedback
+        const button = document.querySelector(`[data-book-id="${book.id}"]`)
+        if (button) {
+          const originalText = button.textContent
+          button.textContent = "Added!"
+          setTimeout(() => {
+            button.textContent = originalText
+          }, 2000)
+        }
+      } else {
+        const data = await res.json()
+        alert(data.error || "Failed to add to wishlist")
+      }
+    } catch (error) {
+      console.error("Error adding to wishlist:", error)
+      alert("Failed to add to wishlist")
+    } finally {
+      setAddingToWishlist(null)
     }
   }
 
@@ -177,40 +223,51 @@ export default function LibraryPage() {
     : books.filter(book => book.category === selectedCategory)
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">My Library</h1>
-          <p className="text-muted-foreground">
-            {filteredBooks.length} {filteredBooks.length === 1 ? "item" : "items"} in your collection
-          </p>
+    <div className="max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-10 lg:mb-12">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+          <div>
+            <div className="inline-block mb-3">
+              <span className="text-sm font-medium px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                Your Collection
+              </span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">My Library</h1>
+            <p className="text-lg text-muted-foreground">
+              {filteredBooks.length} {filteredBooks.length === 1 ? "item" : "items"} in your collection
+            </p>
+          </div>
+          <Button onClick={() => setShowForm(!showForm)} size="lg" className="shadow-soft font-semibold">
+            <Plus className="h-4 w-4 mr-2" />
+            Add {selectedCategory === "note" ? "Note" : "Book"}
+          </Button>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add {selectedCategory === "note" ? "Note" : "Book"}
-        </Button>
       </div>
 
       {/* Category Filter */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-3 mb-8">
         <Button
           variant={selectedCategory === "all" ? "default" : "outline"}
-          size="sm"
+          size="default"
           onClick={() => setSelectedCategory("all")}
+          className={selectedCategory === "all" ? "shadow-soft font-semibold" : "font-medium"}
         >
           All ({books.length})
         </Button>
         <Button
           variant={selectedCategory === "book" ? "default" : "outline"}
-          size="sm"
+          size="default"
           onClick={() => setSelectedCategory("book")}
+          className={selectedCategory === "book" ? "shadow-soft font-semibold" : "font-medium"}
         >
           Books ({books.filter(b => b.category === "book" || !b.category).length})
         </Button>
         <Button
           variant={selectedCategory === "note" ? "default" : "outline"}
-          size="sm"
+          size="default"
           onClick={() => setSelectedCategory("note")}
+          className={selectedCategory === "note" ? "shadow-soft font-semibold" : "font-medium"}
         >
           Notes ({books.filter(b => b.category === "note").length})
         </Button>
@@ -340,16 +397,27 @@ export default function LibraryPage() {
                 <Link href={`/reader/${book.id}`}>
                   <Button className="w-full">Open Book</Button>
                 </Link>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => handleDelete(book.id)}
-                  disabled={deleting === book.id}
-                >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  {deleting === book.id ? "Deleting..." : "Delete"}
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddToWishlist(book)}
+                    disabled={addingToWishlist === book.id}
+                    data-book-id={book.id}
+                  >
+                    <Heart className="h-3 w-3 mr-1" />
+                    {addingToWishlist === book.id ? "Adding..." : "Wishlist"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(book.id)}
+                    disabled={deleting === book.id}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    {deleting === book.id ? "..." : ""}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
