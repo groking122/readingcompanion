@@ -10,6 +10,7 @@ import { ReaderSettings } from "@/components/reader-settings"
 import { EpubReader } from "@/components/epub-reader"
 import { TocDrawer, type TocItem } from "@/components/toc-drawer"
 import { TranslationDrawer } from "@/components/translation-drawer"
+import { TranslationPopover } from "@/components/translation-popover"
 import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
 
 // Component to highlight search term in text content
@@ -143,7 +144,8 @@ export default function ReaderPage() {
   const [translating, setTranslating] = useState(false)
   const [selectedContext, setSelectedContext] = useState<string>("")
   const [popoverOpen, setPopoverOpen] = useState(false)
-  const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 })
+  const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number; width: number; height: number } | undefined>(undefined)
+  const [isMobile, setIsMobile] = useState(false)
   const [saving, setSaving] = useState(false)
   const [fontSize, setFontSize] = useState(16)
   const [fontFamily, setFontFamily] = useState("Inter")
@@ -173,6 +175,16 @@ export default function ReaderPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const router = useRouter()
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768) // md breakpoint
+    }
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   // Helper function to normalize text (trim, collapse whitespace)
   const normalizeText = (text: string): string => {
@@ -549,6 +561,7 @@ export default function ReaderPage() {
     // For non-EPUB, use window selection
     let selectedText = text
     let contextText = context || ""
+    let selectionRect: DOMRect | null = null
     
     if (!selectedText && book?.type !== "epub") {
       const selection = window.getSelection()
@@ -557,9 +570,12 @@ export default function ReaderPage() {
       }
       selectedText = selection.toString().trim()
       
-      // Get context from selection
+      // Get selection bounding box for positioning
       if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0)
+        selectionRect = range.getBoundingClientRect()
+        
+        // Get context from selection
         const container = range.commonAncestorContainer
         if (container.parentElement) {
           contextText = container.parentElement.textContent?.substring(
@@ -571,6 +587,34 @@ export default function ReaderPage() {
     } else if (book?.type === "epub" && context) {
       // Use provided context from EPUB
       contextText = context
+      
+      // For EPUB, try to get selection position from iframe
+      try {
+        const iframe = document.querySelector("iframe")
+        if (iframe?.contentWindow) {
+          const iframeSelection = iframe.contentWindow.getSelection()
+          if (iframeSelection && iframeSelection.rangeCount > 0) {
+            const range = iframeSelection.getRangeAt(0)
+            const rect = range.getBoundingClientRect()
+            const iframeRect = iframe.getBoundingClientRect()
+            // Convert iframe coordinates to page coordinates
+            selectionRect = new DOMRect(
+              rect.left + iframeRect.left,
+              rect.top + iframeRect.top,
+              rect.width,
+              rect.height
+            )
+          }
+        }
+      } catch (e) {
+        // Iframe access might fail, use center of viewport as fallback
+        selectionRect = new DOMRect(
+          window.innerWidth / 2,
+          window.innerHeight / 2,
+          0,
+          0
+        )
+      }
     }
 
     // Validate phrase length (2-6 words)
@@ -597,6 +641,24 @@ export default function ReaderPage() {
     setSelectedContext(contextText || selectedText)
     setTranslating(true)
     setSavedWordId(null) // Reset saved state
+
+    // Capture selection position for desktop popover
+    if (selectionRect) {
+      setPopoverPosition({
+        x: selectionRect.left,
+        y: selectionRect.top,
+        width: selectionRect.width,
+        height: selectionRect.height,
+      })
+    } else {
+      // Fallback: center of viewport
+      setPopoverPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+        width: 0,
+        height: 0,
+      })
+    }
 
     try {
       const res = await fetch("/api/translate", {
@@ -1352,63 +1414,141 @@ export default function ReaderPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Translation Drawer - Mobile & Desktop (rendered at root level for proper z-index) */}
-        <TranslationDrawer
-          isOpen={popoverOpen}
-          onClose={() => {
-            setPopoverOpen(false)
-            setSelectedText("")
-            setTranslation("")
-            setAlternativeTranslations([])
-            setSavedWordId(null)
-          }}
-          selectedText={selectedText}
-          translation={translation}
-          translating={translating}
-          alternativeTranslations={alternativeTranslations}
-          saving={saving}
-          savedWordId={savedWordId}
-          isPhrase={isPhrase(selectedText)}
-          onSave={handleSaveWord}
-          onMarkKnown={async () => {
-            try {
-              // Mark as known without saving to vocabulary
-              const normalized = selectedText.trim().toLowerCase().replace(/\s+/g, " ")
-              await fetch("/api/vocabulary", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  term: selectedText,
-                  termNormalized: normalized,
-                  isKnown: true,
-                }),
-              })
+        {/* Translation UI - Adaptive: Popover on desktop, Drawer on mobile */}
+        {isMobile ? (
+          <TranslationDrawer
+            isOpen={popoverOpen}
+            onClose={() => {
               setPopoverOpen(false)
               setSelectedText("")
               setTranslation("")
               setAlternativeTranslations([])
               setSavedWordId(null)
-            } catch (error) {
-              console.error("Failed to mark as known:", error)
-            }
-          }}
-          onUndo={async () => {
-            if (savedWordId) {
+              setPopoverPosition(undefined)
+            }}
+            selectedText={selectedText}
+            translation={translation}
+            translating={translating}
+            alternativeTranslations={alternativeTranslations}
+            saving={saving}
+            savedWordId={savedWordId}
+            isPhrase={isPhrase(selectedText)}
+            context={selectedContext}
+            onSave={handleSaveWord}
+            onMarkKnown={async () => {
               try {
-                await fetch(`/api/vocabulary/${savedWordId}`, {
-                  method: "DELETE",
+                // Mark as known without saving to vocabulary
+                const normalized = selectedText.trim().toLowerCase().replace(/\s+/g, " ")
+                await fetch("/api/vocabulary", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    term: selectedText,
+                    termNormalized: normalized,
+                    isKnown: true,
+                  }),
                 })
                 setPopoverOpen(false)
                 setSelectedText("")
                 setTranslation("")
                 setAlternativeTranslations([])
                 setSavedWordId(null)
+                setPopoverPosition(undefined)
               } catch (error) {
-                console.error("Failed to undo save:", error)
+                console.error("Failed to mark as known:", error)
               }
-            }
-          }}
-        />
+            }}
+            onUndo={async () => {
+              if (savedWordId) {
+                try {
+                  await fetch(`/api/vocabulary/${savedWordId}`, {
+                    method: "DELETE",
+                  })
+                  setPopoverOpen(false)
+                  setSelectedText("")
+                  setTranslation("")
+                  setAlternativeTranslations([])
+                  setSavedWordId(null)
+                  setPopoverPosition(undefined)
+                } catch (error) {
+                  console.error("Failed to undo save:", error)
+                }
+              }
+            }}
+          />
+        ) : (
+          <TranslationPopover
+            isOpen={popoverOpen}
+            onClose={() => {
+              setPopoverOpen(false)
+              setSelectedText("")
+              setTranslation("")
+              setAlternativeTranslations([])
+              setSavedWordId(null)
+              setPopoverPosition(undefined)
+              // Return focus to last focused element
+              if (lastFocusRef.current) {
+                lastFocusRef.current.focus()
+              }
+            }}
+            selectedText={selectedText}
+            translation={translation}
+            translating={translating}
+            alternativeTranslations={alternativeTranslations}
+            saving={saving}
+            savedWordId={savedWordId}
+            isPhrase={isPhrase(selectedText)}
+            context={selectedContext}
+            selectionPosition={popoverPosition}
+            onSave={handleSaveWord}
+            onMarkKnown={async () => {
+              try {
+                // Mark as known without saving to vocabulary
+                const normalized = selectedText.trim().toLowerCase().replace(/\s+/g, " ")
+                await fetch("/api/vocabulary", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    term: selectedText,
+                    termNormalized: normalized,
+                    isKnown: true,
+                  }),
+                })
+                setPopoverOpen(false)
+                setSelectedText("")
+                setTranslation("")
+                setAlternativeTranslations([])
+                setSavedWordId(null)
+                setPopoverPosition(undefined)
+                if (lastFocusRef.current) {
+                  lastFocusRef.current.focus()
+                }
+              } catch (error) {
+                console.error("Failed to mark as known:", error)
+              }
+            }}
+            onUndo={async () => {
+              if (savedWordId) {
+                try {
+                  await fetch(`/api/vocabulary/${savedWordId}`, {
+                    method: "DELETE",
+                  })
+                  setPopoverOpen(false)
+                  setSelectedText("")
+                  setTranslation("")
+                  setAlternativeTranslations([])
+                  setSavedWordId(null)
+                  setPopoverPosition(undefined)
+                  if (lastFocusRef.current) {
+                    lastFocusRef.current.focus()
+                  }
+                } catch (error) {
+                  console.error("Failed to undo save:", error)
+                }
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   )
