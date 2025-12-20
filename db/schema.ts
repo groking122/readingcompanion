@@ -18,8 +18,11 @@ export const vocabulary = pgTable("vocabulary", {
   userId: text("user_id").notNull(),
   bookId: uuid("book_id").references(() => books.id).notNull(),
   term: text("term").notNull(),
+  termNormalized: text("term_normalized"), // Normalized version for caching (lowercase, trimmed)
   translation: text("translation").notNull(), // Greek translation
   context: text("context").notNull(), // Snippet of text around the word
+  kind: text("kind").default("word").notNull(), // 'word' or 'phrase'
+  isKnown: boolean("is_known").default(false).notNull(), // Mark as known - don't show in lookups
   pageNumber: integer("page_number"), // For PDFs
   position: integer("position"), // Character position in text
   epubLocation: text("epub_location"), // EPUB CFI location string
@@ -54,6 +57,18 @@ export const wishlist = pgTable("wishlist", {
   notes: text("notes"), // Optional notes about why they want to read it
   priority: integer("priority").default(0), // 0 = normal, 1 = high, -1 = low
   status: text("status").default("want_to_read"), // 'want_to_read', 'reading', 'completed'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const bookmarks = pgTable("bookmarks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  bookId: uuid("book_id").references(() => books.id).notNull(),
+  title: text("title"), // Optional bookmark title/note
+  epubLocation: text("epub_location"), // EPUB CFI location
+  pageNumber: integer("page_number"), // Page number for PDFs
+  position: integer("position"), // Character position for text
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

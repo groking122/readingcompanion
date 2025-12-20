@@ -24,8 +24,11 @@ export async function GET(request: NextRequest) {
       .select({
         id: vocabulary.id,
         term: vocabulary.term,
+        termNormalized: vocabulary.termNormalized,
         translation: vocabulary.translation,
         context: vocabulary.context,
+        kind: vocabulary.kind,
+        isKnown: vocabulary.isKnown,
         bookId: vocabulary.bookId,
         pageNumber: vocabulary.pageNumber,
         position: vocabulary.position,
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { term, translation, context, bookId, pageNumber, position, epubLocation } = body
+    const { term, translation, context, bookId, pageNumber, position, epubLocation, kind } = body
 
     if (!term || !translation || !context || !bookId) {
       return NextResponse.json(
@@ -65,6 +68,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Normalize term for caching (lowercase, trim, collapse whitespace)
+    const termNormalized = term.trim().toLowerCase().replace(/\s+/g, " ")
+    
+    // Determine kind if not provided (phrase = 2-6 words)
+    const wordCount = termNormalized.split(/\s+/).filter((w: string) => w.length > 0).length
+    const vocabKind = kind || (wordCount >= 2 && wordCount <= 6 ? "phrase" : "word")
+
     // Create vocabulary entry
     const [newVocab] = await db
       .insert(vocabulary)
@@ -72,8 +82,10 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         bookId,
         term,
+        termNormalized,
         translation,
         context,
+        kind: vocabKind,
         pageNumber: pageNumber || null,
         position: position || null,
         epubLocation: epubLocation || null,
@@ -97,6 +109,77 @@ export async function POST(request: NextRequest) {
     console.error("Error saving vocabulary:", error)
     return NextResponse.json(
       { error: "Failed to save vocabulary" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = await currentUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { id, term, termNormalized, isKnown } = body
+
+    // If term is provided, mark it as known (for "mark as known" without saving)
+    if (term && termNormalized && typeof isKnown === "boolean") {
+      // Check if vocabulary entry exists with this normalized term
+      const existing = await db
+        .select()
+        .from(vocabulary)
+        .where(and(
+          eq(vocabulary.termNormalized, termNormalized),
+          eq(vocabulary.userId, user.id)
+        ))
+        .limit(1)
+
+      if (existing.length > 0) {
+        // Update existing entry
+        const [updated] = await db
+          .update(vocabulary)
+          .set({ isKnown })
+          .where(and(
+            eq(vocabulary.id, existing[0].id),
+            eq(vocabulary.userId, user.id)
+          ))
+          .returning()
+        return NextResponse.json(updated)
+      } else {
+        // Just return success - we'll filter by known list in translation
+        return NextResponse.json({ success: true, markedAsKnown: true })
+      }
+    }
+
+    // Otherwise, update by ID
+    if (!id || typeof isKnown !== "boolean") {
+      return NextResponse.json(
+        { error: "Missing required fields: id and isKnown, or term/termNormalized and isKnown" },
+        { status: 400 }
+      )
+    }
+
+    // Update vocabulary entry by ID
+    const [updatedVocab] = await db
+      .update(vocabulary)
+      .set({ isKnown })
+      .where(and(eq(vocabulary.id, id), eq(vocabulary.userId, user.id)))
+      .returning()
+
+    if (!updatedVocab) {
+      return NextResponse.json(
+        { error: "Vocabulary not found" },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(updatedVocab)
+  } catch (error) {
+    console.error("Error updating vocabulary:", error)
+    return NextResponse.json(
+      { error: "Failed to update vocabulary" },
       { status: 500 }
     )
   }

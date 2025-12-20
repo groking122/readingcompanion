@@ -17,6 +17,7 @@ interface TranslationDrawerProps {
   isPhrase: boolean
   onSave: () => void
   onUndo: () => void
+  onMarkKnown?: () => void
 }
 
 export function TranslationDrawer({
@@ -31,6 +32,7 @@ export function TranslationDrawer({
   isPhrase,
   onSave,
   onUndo,
+  onMarkKnown,
 }: TranslationDrawerProps) {
   if (!isOpen) return null
 
@@ -38,7 +40,7 @@ export function TranslationDrawer({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+        className="fixed inset-0 bg-black/50 z-[100] transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -46,9 +48,9 @@ export function TranslationDrawer({
       {/* Drawer - Bottom on mobile, Right on desktop */}
       <div
         className={cn(
-          "fixed z-50 bg-background border-t md:border-t-0 md:border-r shadow-xl transition-transform duration-300 ease-in-out",
+          "fixed z-[101] bg-background border-t md:border-t-0 md:border-r shadow-xl transition-transform duration-300 ease-in-out",
           // Mobile: bottom drawer
-          "bottom-0 left-0 right-0 max-h-[80vh] md:hidden",
+          "bottom-0 left-0 right-0 max-h-[80vh] md:hidden rounded-t-lg",
           // Desktop: right drawer
           "md:top-0 md:right-0 md:bottom-0 md:w-96 md:max-h-none",
           isOpen ? "translate-y-0 md:translate-x-0" : "translate-y-full md:translate-x-full"
@@ -119,14 +121,28 @@ export function TranslationDrawer({
 
           {/* Footer Actions */}
           <div className="p-4 border-t space-y-2 shrink-0">
-            <Button
-              size="lg"
-              onClick={onSave}
-              disabled={saving || !translation || !!savedWordId}
-              className="w-full h-12 min-h-[48px]"
-            >
-              {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase ? "Save Phrase" : "Save Word"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="lg"
+                onClick={onSave}
+                disabled={saving || !translation || !!savedWordId}
+                className="flex-1 h-12 min-h-[48px]"
+              >
+                {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase ? "Save Phrase" : "Save Word"}
+              </Button>
+              {onMarkKnown && !savedWordId && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={onMarkKnown}
+                  disabled={saving}
+                  className="h-12 min-w-[48px] px-4"
+                  title="Mark as known - won't show in future lookups"
+                >
+                  Known
+                </Button>
+              )}
+            </div>
             {savedWordId && (
               <Button
                 size="lg"

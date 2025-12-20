@@ -160,7 +160,7 @@ export function ReaderSettings({
                   variant={theme === "light" ? "default" : "outline"}
                   size="sm"
                   onClick={() => onThemeChange("light")}
-                  className="h-12"
+                  className="h-12 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95"
                 >
                   Light
                 </Button>
@@ -168,7 +168,7 @@ export function ReaderSettings({
                   variant={theme === "sepia" ? "default" : "outline"}
                   size="sm"
                   onClick={() => onThemeChange("sepia")}
-                  className="h-12"
+                  className="h-12 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95"
                 >
                   Sepia
                 </Button>
@@ -176,7 +176,7 @@ export function ReaderSettings({
                   variant={theme === "dark" ? "default" : "outline"}
                   size="sm"
                   onClick={() => onThemeChange("dark")}
-                  className="h-12"
+                  className="h-12 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95"
                 >
                   Dark
                 </Button>
@@ -184,7 +184,7 @@ export function ReaderSettings({
                   variant={theme === "paper" ? "default" : "outline"}
                   size="sm"
                   onClick={() => onThemeChange("paper")}
-                  className="h-12"
+                  className="h-12 transition-all duration-200 ease-in-out hover:scale-105 active:scale-95"
                 >
                   Paper
                 </Button>

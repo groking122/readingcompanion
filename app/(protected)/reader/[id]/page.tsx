@@ -5,11 +5,12 @@ import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Loader2, Settings2, X, Menu, BookOpen, Keyboard } from "lucide-react"
+import { Loader2, Settings2, X, Menu, BookOpen, Keyboard, Bookmark, BookmarkCheck } from "lucide-react"
 import { ReaderSettings } from "@/components/reader-settings"
 import { EpubReader } from "@/components/epub-reader"
 import { TocDrawer, type TocItem } from "@/components/toc-drawer"
 import { TranslationDrawer } from "@/components/translation-drawer"
+import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
 
 // Component to highlight search term in text content
 function SearchHighlight({ searchTerm }: { searchTerm: string }) {
@@ -169,6 +170,8 @@ export default function ReaderPage() {
   const [currentChapter, setCurrentChapter] = useState<string>("")
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
+  const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const router = useRouter()
 
   // Helper function to normalize text (trim, collapse whitespace)
@@ -327,6 +330,16 @@ export default function ReaderPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId])
+
+  // Fetch bookmarks for this book
+  useEffect(() => {
+    if (book?.id) {
+      fetch(`/api/bookmarks?bookId=${book.id}`)
+        .then(res => res.json())
+        .then(data => setBookmarks(data))
+        .catch(err => console.error("Error fetching bookmarks:", err))
+    }
+  }, [book?.id])
 
   // Separate effect to handle search after rendition is ready
   // Use a ref to track if search has been performed to prevent infinite loops
@@ -766,20 +779,70 @@ export default function ReaderPage() {
     <div className={`min-h-screen ${distractionFree ? themeClass : "bg-background"}`}>
       {!distractionFree && (
         <div className="mb-6 container mx-auto px-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold">{book.title}</h1>
-            {book.type === "epub" && (
+          <div className="flex items-center justify-between mb-4 gap-2">
+            <h1 className="text-2xl font-bold flex-1 truncate">{book.title}</h1>
+            <div className="flex items-center gap-2">
+              {/* Bookmarks Button */}
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => setTocOpen(true)}
+                onClick={() => setBookmarksOpen(true)}
                 className="h-12 min-w-[48px]"
-                aria-label="Open table of contents"
+                aria-label="Bookmarks"
               >
-                <Menu className="h-5 w-5" />
-                <span className="hidden sm:inline ml-2">Contents</span>
+                <Bookmark className="h-5 w-5" />
+                {bookmarks.length > 0 && (
+                  <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[18px]">
+                    {bookmarks.length}
+                  </span>
+                )}
               </Button>
-            )}
+              {/* Add Bookmark Button */}
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={async () => {
+                  try {
+                    const bookmarkData: any = { bookId: book.id }
+                    if (book.type === "epub" && currentLocation) {
+                      bookmarkData.epubLocation = typeof currentLocation === "string" ? currentLocation : String(currentLocation)
+                      bookmarkData.pageNumber = currentPage
+                    } else if (book.content) {
+                      bookmarkData.pageNumber = currentPage
+                    }
+                    
+                    const res = await fetch("/api/bookmarks", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(bookmarkData),
+                    })
+                    if (res.ok) {
+                      const newBookmark = await res.json()
+                      setBookmarks([...bookmarks, newBookmark])
+                    }
+                  } catch (error) {
+                    console.error("Error creating bookmark:", error)
+                  }
+                }}
+                className="h-12 min-w-[48px]"
+                aria-label="Add bookmark"
+                title="Bookmark current location"
+              >
+                <BookmarkCheck className="h-5 w-5" />
+              </Button>
+              {book.type === "epub" && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setTocOpen(true)}
+                  className="h-12 min-w-[48px]"
+                  aria-label="Open table of contents"
+                >
+                  <Menu className="h-5 w-5" />
+                  <span className="hidden sm:inline ml-2">Contents</span>
+                </Button>
+              )}
+            </div>
           </div>
           <ReaderSettings
             fontSize={fontSize}
@@ -1041,41 +1104,34 @@ export default function ReaderPage() {
                 currentLocation={typeof currentLocation === 'string' ? currentLocation : undefined}
               />
 
-              {/* Translation Drawer - Mobile & Desktop */}
-              <TranslationDrawer
-                isOpen={popoverOpen}
-                onClose={() => {
-                  setPopoverOpen(false)
-                  setSelectedText("")
-                  setTranslation("")
-                  setAlternativeTranslations([])
-                  setSavedWordId(null)
-                }}
-                selectedText={selectedText}
-                translation={translation}
-                translating={translating}
-                alternativeTranslations={alternativeTranslations}
-                saving={saving}
-                savedWordId={savedWordId}
-                isPhrase={isPhrase(selectedText)}
-                onSave={handleSaveWord}
-                onUndo={async () => {
-                  if (savedWordId) {
+              {/* Bookmarks Drawer */}
+              <BookmarksDrawer
+                isOpen={bookmarksOpen}
+                onClose={() => setBookmarksOpen(false)}
+                bookmarks={bookmarks}
+                onNavigate={(bookmark) => {
+                  if (book.type === "epub" && bookmark.epubLocation && renditionRef.current) {
                     try {
-                      await fetch(`/api/vocabulary/${savedWordId}`, {
-                        method: "DELETE",
-                      })
-                      setPopoverOpen(false)
-                      setSelectedText("")
-                      setTranslation("")
-                      setAlternativeTranslations([])
-                      setSavedWordId(null)
-                    } catch (error) {
-                      console.error("Failed to undo save:", error)
+                      renditionRef.current.display(bookmark.epubLocation)
+                      setBookmarksOpen(false)
+                    } catch (e) {
+                      console.error("Error navigating to bookmark:", e)
                     }
+                  } else if (bookmark.pageNumber) {
+                    setCurrentPage(bookmark.pageNumber)
+                    setBookmarksOpen(false)
+                  }
+                }}
+                onDelete={async (id) => {
+                  try {
+                    await fetch(`/api/bookmarks/${id}`, { method: "DELETE" })
+                    setBookmarks(bookmarks.filter(b => b.id !== id))
+                  } catch (error) {
+                    console.error("Error deleting bookmark:", error)
                   }
                 }}
               />
+
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
@@ -1295,6 +1351,64 @@ export default function ReaderPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Translation Drawer - Mobile & Desktop (rendered at root level for proper z-index) */}
+        <TranslationDrawer
+          isOpen={popoverOpen}
+          onClose={() => {
+            setPopoverOpen(false)
+            setSelectedText("")
+            setTranslation("")
+            setAlternativeTranslations([])
+            setSavedWordId(null)
+          }}
+          selectedText={selectedText}
+          translation={translation}
+          translating={translating}
+          alternativeTranslations={alternativeTranslations}
+          saving={saving}
+          savedWordId={savedWordId}
+          isPhrase={isPhrase(selectedText)}
+          onSave={handleSaveWord}
+          onMarkKnown={async () => {
+            try {
+              // Mark as known without saving to vocabulary
+              const normalized = selectedText.trim().toLowerCase().replace(/\s+/g, " ")
+              await fetch("/api/vocabulary", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  term: selectedText,
+                  termNormalized: normalized,
+                  isKnown: true,
+                }),
+              })
+              setPopoverOpen(false)
+              setSelectedText("")
+              setTranslation("")
+              setAlternativeTranslations([])
+              setSavedWordId(null)
+            } catch (error) {
+              console.error("Failed to mark as known:", error)
+            }
+          }}
+          onUndo={async () => {
+            if (savedWordId) {
+              try {
+                await fetch(`/api/vocabulary/${savedWordId}`, {
+                  method: "DELETE",
+                })
+                setPopoverOpen(false)
+                setSelectedText("")
+                setTranslation("")
+                setAlternativeTranslations([])
+                setSavedWordId(null)
+              } catch (error) {
+                console.error("Failed to undo save:", error)
+              }
+            }
+          }}
+        />
       </div>
     </div>
   )
