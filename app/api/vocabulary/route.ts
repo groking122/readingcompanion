@@ -79,8 +79,32 @@ export async function POST(request: NextRequest) {
       // Don't fail - some IDs might be in different format
     }
 
-    // Skip book existence check - let database foreign key constraint handle it
-    // This avoids potential connection/query errors that could mask the real issue
+    // Verify book exists and belongs to user before attempting insert
+    // This provides better error messages than foreign key constraint violations
+    try {
+      const existingBook = await db
+        .select({ id: books.id })
+        .from(books)
+        .where(and(eq(books.id, bookId), eq(books.userId, user.id)))
+        .limit(1)
+      
+      if (existingBook.length === 0) {
+        console.error("Book not found:", { bookId, userId: user.id })
+        return NextResponse.json(
+          { 
+            error: "Book not found",
+            message: `The book with ID ${bookId} does not exist or you don't have permission to access it`,
+            code: "BOOK_NOT_FOUND"
+          },
+          { status: 404 }
+        )
+      }
+      console.log("Book verified:", existingBook[0].id)
+    } catch (bookCheckError: any) {
+      console.error("Error checking book:", bookCheckError)
+      // If book check fails, still try the insert - let database handle it
+      console.warn("Continuing with insert despite book check error")
+    }
 
     // Use term as context fallback if context is missing
     const finalContext = (context && context.trim().length > 0) ? context.trim() : term.trim()
@@ -103,20 +127,36 @@ export async function POST(request: NextRequest) {
     // Create vocabulary entry
     let newVocab
     try {
+      // Validate and sanitize all values before insert
       const insertValues = {
         userId: user.id,
-        bookId,
-        term: term.trim(),
-        termNormalized,
-        translation: translation.trim(),
-        context: finalContext,
-        kind: vocabKind,
-        pageNumber: pageNumber || null,
-        position: position || null,
-        epubLocation: epubLocation || null,
+        bookId: String(bookId).trim(),
+        term: String(term).trim(),
+        termNormalized: String(termNormalized).trim(),
+        translation: String(translation).trim(),
+        context: String(finalContext).trim(),
+        kind: String(vocabKind).trim(),
+        pageNumber: pageNumber ? Number(pageNumber) : null,
+        position: position ? Number(position) : null,
+        epubLocation: epubLocation ? String(epubLocation).trim() : null,
       }
       
-      console.log("Inserting vocabulary with values:", JSON.stringify(insertValues, null, 2))
+      // Final validation
+      if (!insertValues.term || insertValues.term.length === 0) {
+        throw new Error("Term cannot be empty")
+      }
+      if (!insertValues.translation || insertValues.translation.length === 0) {
+        throw new Error("Translation cannot be empty")
+      }
+      if (!insertValues.context || insertValues.context.length === 0) {
+        insertValues.context = insertValues.term // Fallback to term if context is still empty
+      }
+      
+      console.log("Inserting vocabulary with values:", {
+        ...insertValues,
+        context: insertValues.context.substring(0, 100) + (insertValues.context.length > 100 ? "..." : ""), // Truncate for logging
+        contextLength: insertValues.context.length
+      })
       
       const result = await db
         .insert(vocabulary)
@@ -138,27 +178,46 @@ export async function POST(request: NextRequest) {
       
       // Check for specific database errors
       if (dbError?.code === "23503") {
+        // Foreign key constraint violation - book doesn't exist
+        console.error("Foreign key violation - book may not exist:", bookId)
         return NextResponse.json(
           { 
-            error: "Invalid book reference - book may not exist",
+            error: "Invalid book reference - the book may have been deleted or doesn't exist",
             message: dbError?.message || "Foreign key constraint violation",
-            details: dbError?.detail
+            details: dbError?.detail || `Book ID ${bookId} not found`,
+            code: "23503"
           },
           { status: 400 }
         )
       }
       if (dbError?.code === "23505") {
+        // Unique constraint violation - word already exists
         return NextResponse.json(
           { 
             error: "This word already exists in your vocabulary",
             message: dbError?.message || "Unique constraint violation",
-            details: dbError?.detail
+            details: dbError?.detail,
+            code: "23505"
           },
           { status: 409 }
         )
       }
+      if (dbError?.code === "23502") {
+        // NOT NULL constraint violation
+        return NextResponse.json(
+          { 
+            error: "Missing required field",
+            message: dbError?.message || "NOT NULL constraint violation",
+            details: dbError?.detail,
+            code: "23502"
+          },
+          { status: 400 }
+        )
+      }
       // Re-throw with more context
-      throw new Error(`Database error: ${dbError?.message || String(dbError)} (code: ${dbError?.code || 'unknown'})`)
+      const errorMsg = dbError?.message || String(dbError)
+      console.error("Unhandled database error:", errorMsg)
+      throw new Error(`Database error: ${errorMsg} (code: ${dbError?.code || 'unknown'})`)
     }
 
     // Create flashcard with SM-2 defaults
