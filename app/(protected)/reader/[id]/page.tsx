@@ -792,11 +792,24 @@ export default function ReaderPage() {
           errorData = { error: `HTTP ${response.status}: ${response.statusText}` }
         }
         
-        console.error("Save error response:", {
-          status: response.status,
-          statusText: response.statusText,
-          errorData: JSON.stringify(errorData, null, 2)
-        })
+        // Log error data in multiple ways for debugging
+        console.error("=== SAVE ERROR RESPONSE ===")
+        console.error("Status:", response.status)
+        console.error("Status Text:", response.statusText)
+        console.error("Error Data Object:", errorData)
+        console.error("Error Data JSON:", JSON.stringify(errorData, null, 2))
+        
+        // Log each property separately for easier debugging
+        if (errorData) {
+          console.error("--- Error Properties ---")
+          console.error("error:", errorData.error)
+          console.error("message:", errorData.message)
+          console.error("code:", errorData.code)
+          console.error("constraint:", errorData.constraint)
+          console.error("detail:", errorData.detail)
+          console.error("details:", errorData.details)
+          console.error("stack:", errorData.stack)
+        }
         
         // Build user-friendly error message
         let errorMessage = errorData.error || errorData.message || `Failed to save word (${response.status})`

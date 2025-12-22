@@ -79,22 +79,8 @@ export async function POST(request: NextRequest) {
       // Don't fail - some IDs might be in different format
     }
 
-    // Verify book exists and belongs to user (optional check - don't fail if it errors)
-    try {
-      const existingBook = await db
-        .select()
-        .from(books)
-        .where(and(eq(books.id, bookId), eq(books.userId, user.id)))
-        .limit(1)
-      
-      if (existingBook.length === 0) {
-        console.warn("Book not found or doesn't belong to user, but continuing:", { bookId, userId: user.id })
-        // Don't fail - let database foreign key constraint handle it
-      }
-    } catch (bookCheckError) {
-      console.warn("Error checking book existence, continuing anyway:", bookCheckError)
-      // Don't fail - let database handle foreign key constraint
-    }
+    // Skip book existence check - let database foreign key constraint handle it
+    // This avoids potential connection/query errors that could mask the real issue
 
     // Use term as context fallback if context is missing
     const finalContext = (context && context.trim().length > 0) ? context.trim() : term.trim()
@@ -196,31 +182,42 @@ export async function POST(request: NextRequest) {
     // Return the created vocabulary (already includes id)
     return NextResponse.json(newVocab)
   } catch (error: any) {
-    console.error("Error saving vocabulary:", error)
-    const errorMessage = error instanceof Error ? error.message : "Unknown error"
-    const errorDetails = error instanceof Error ? error.stack : String(error)
-    const errorCode = error?.code || "UNKNOWN"
-    const errorConstraint = error?.constraint || "N/A"
+    console.error("=== ERROR SAVING VOCABULARY ===")
+    console.error("Error type:", typeof error)
+    console.error("Error constructor:", error?.constructor?.name)
+    console.error("Error message:", error?.message)
+    console.error("Error code:", error?.code)
+    console.error("Error constraint:", error?.constraint)
+    console.error("Error detail:", error?.detail)
+    console.error("Error stack:", error?.stack)
     
-    console.error("Error details:", {
+    // Try to extract more details
+    const errorMessage = error?.message || String(error) || "Unknown error"
+    const errorCode = error?.code || error?.errno || "UNKNOWN"
+    const errorConstraint = error?.constraint || "N/A"
+    const errorDetail = error?.detail || error?.hint || "No additional details"
+    
+    // Log full error object
+    try {
+      console.error("Full error object:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    } catch (e) {
+      console.error("Could not stringify error:", e)
+    }
+    
+    // Return detailed error - always include message for debugging
+    const responseBody = {
+      error: "Failed to save vocabulary",
       message: errorMessage,
       code: errorCode,
       constraint: errorConstraint,
-      stack: errorDetails,
-      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
-    })
+      detail: errorDetail,
+      // Include stack in development
+      ...(process.env.NODE_ENV === "development" && { stack: error?.stack })
+    }
     
-    // Return more detailed error - always include message for debugging
-    return NextResponse.json(
-      { 
-        error: "Failed to save vocabulary",
-        message: errorMessage,
-        code: errorCode,
-        constraint: errorConstraint,
-        details: errorDetails
-      },
-      { status: 500 }
-    )
+    console.error("Returning error response:", JSON.stringify(responseBody, null, 2))
+    
+    return NextResponse.json(responseBody, { status: 500 })
   }
 }
 
