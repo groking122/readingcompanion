@@ -680,13 +680,17 @@ export default function ReaderPage() {
   }
 
   const handleSaveWord = async () => {
+    console.log("handleSaveWord called", { selectedText, translation, book: book?.id })
+    
     if (!selectedText || !translation || !book) {
+      console.error("Missing required fields:", { selectedText: !!selectedText, translation: !!translation, book: !!book })
       toast.error("Missing information", "Please select a word and wait for translation.")
       return
     }
 
     setSaving(true)
     try {
+      console.log("Starting save process...")
       // Ensure we always have a context - use selectedText as fallback
       let context = selectedContext?.trim() || selectedText.trim()
       
@@ -735,19 +739,25 @@ export default function ReaderPage() {
         }
       }
 
+      const payload = {
+        term: selectedText.trim(),
+        translation: translation.trim(),
+        context: context.trim(),
+        bookId: book.id,
+        position,
+        epubLocation,
+        pageNumber,
+      }
+      
+      console.log("Sending save request:", payload)
+      
       const response = await fetch("/api/vocabulary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          term: selectedText.trim(),
-          translation: translation.trim(),
-          context: context.trim(),
-          bookId: book.id,
-          position,
-          epubLocation,
-          pageNumber,
-        }),
+        body: JSON.stringify(payload),
       })
+      
+      console.log("Response status:", response.status, response.statusText)
 
       if (response.ok) {
         const data = await response.json()
@@ -775,15 +785,27 @@ export default function ReaderPage() {
         })
       } else {
         // Get actual error message from API
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-        const errorMessage = errorData.error || errorData.message || "Failed to save word"
-        console.error("Save error:", errorData)
+        let errorData
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` }
+        }
+        const errorMessage = errorData.error || errorData.message || `Failed to save word (${response.status})`
+        console.error("Save error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        })
         throw new Error(errorMessage)
       }
     } catch (error) {
       console.error("Error saving word:", error)
       const errorMessage = error instanceof Error ? error.message : "An error occurred while saving. Please try again."
       toast.error("Failed to save", errorMessage)
+      // Don't reset saving state immediately - let user see the error
+      setTimeout(() => setSaving(false), 1000)
+      return
     } finally {
       setSaving(false)
     }
@@ -1278,127 +1300,6 @@ export default function ReaderPage() {
         )}
         </div>
 
-        {/* Improved Translation Popover - Desktop only (mobile uses drawer) */}
-        {popoverOpen && (
-          <div className="hidden md:block mt-6 translation-popover">
-            <div 
-              className="w-full max-w-2xl mx-auto border rounded-lg bg-background shadow-lg p-0 select-none relative"
-              role="dialog"
-              aria-label="Translation"
-              aria-modal="true"
-            >
-              {/* Header with close button - WCAG compliant */}
-              <div className="flex items-center justify-between p-3 border-b bg-muted/50">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {savedWordId ? "Saved ✓" : "Translation"}
-                </span>
-                <Button
-                  ref={closeBtnRef}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setPopoverOpen(false)
-                    setSelectedText("")
-                    setTranslation("")
-                    setAlternativeTranslations([])
-                    setSavedWordId(null)
-                  }}
-                  className="h-8 w-8 min-w-[32px] p-0"
-                  aria-label="Close translation"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <div className="space-y-3 p-4">
-                <div>
-                  <p className="text-sm font-medium mb-1">Term:</p>
-                  <p className="text-sm break-words">{selectedText}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium mb-1">Translation (Greek):</p>
-                  {translating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-sm break-words font-medium">{translation}</p>
-                      {alternativeTranslations.length > 0 && (
-                        <div className="pt-2 border-t">
-                          <p className="text-xs text-muted-foreground mb-2 font-medium">
-                            Alternative translations ({Math.min(alternativeTranslations.length, 6)} shown):
-                          </p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {alternativeTranslations.slice(0, 6).map((alt, idx) => (
-                              <span
-                                key={idx}
-                                className="text-xs px-2.5 py-1.5 rounded-md bg-muted/80 text-foreground border border-border hover:bg-muted transition-colors text-center"
-                              >
-                                {alt}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    size="lg"
-                    onClick={handleSaveWord}
-                    disabled={saving || !translation || !!savedWordId}
-                    className="flex-1 h-12 min-h-[48px]"
-                  >
-                    {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase(selectedText) ? "Save Phrase" : "Save Word"}
-                  </Button>
-                  {savedWordId && (
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      onClick={async () => {
-                        if (savedWordId) {
-                          try {
-                            await fetch(`/api/vocabulary/${savedWordId}`, {
-                              method: "DELETE",
-                            })
-                            setPopoverOpen(false)
-                            setSelectedText("")
-                            setTranslation("")
-                            setAlternativeTranslations([])
-                            setSavedWordId(null)
-                            toast.success("Undone", "Word has been removed from your vocabulary.")
-                          } catch (error) {
-                            console.error("Failed to undo save:", error)
-                            toast.error("Failed to undo", "Could not remove the word. Please try again.")
-                          }
-                        }
-                      }}
-                      className="h-12 min-w-[48px]"
-                    >
-                      Undo
-                    </Button>
-                  )}
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={() => {
-                      setPopoverOpen(false)
-                      setSelectedText("")
-                      setTranslation("")
-                      setAlternativeTranslations([])
-                      setSavedWordId(null)
-                    }}
-                    className="h-12 min-w-[48px]"
-                    aria-label="Close"
-                  >
-                    <X className="h-5 w-5" />
-                    <span className="hidden sm:inline ml-2">Close</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
 
         {/* Keyboard Shortcuts Help Dialog */}

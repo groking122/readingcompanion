@@ -141,14 +141,22 @@ export function TranslationContent({
         <div className="flex gap-2">
           <Button
             size={compact ? "default" : "lg"}
-            onClick={onSave}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              console.log("Save button clicked", { saving, translation: !!translation, savedWordId })
+              if (!saving && translation && !savedWordId) {
+                onSave()
+              }
+            }}
             disabled={saving || !translation || !!savedWordId}
             className={cn(
               "flex-1",
               compact ? "h-10 min-h-[40px]" : "h-12 min-h-[48px]"
             )}
+            type="button"
           >
-            {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase ? "Save Phrase" : "Save"}
+            {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase ? "Save Phrase" : "Save Word"}
           </Button>
           {onMarkKnown && !savedWordId && (
             <Button

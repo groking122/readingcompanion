@@ -111,8 +111,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(newVocab)
   } catch (error) {
     console.error("Error saving vocabulary:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    const errorDetails = error instanceof Error ? error.stack : String(error)
+    console.error("Error details:", errorDetails)
     return NextResponse.json(
-      { error: "Failed to save vocabulary" },
+      { 
+        error: "Failed to save vocabulary",
+        message: errorMessage,
+        details: process.env.NODE_ENV === "development" ? errorDetails : undefined
+      },
       { status: 500 }
     )
   }
