@@ -957,9 +957,9 @@ export default function ReaderPage() {
   const textColorClass = theme === "dark" ? "text-[#e0e0e0]" : "text-foreground"
 
   return (
-    <div className={`min-h-screen transition-[background-color,color] duration-200 ease-out ${distractionFree ? themeClass : "bg-background"}`}>
+    <div className={`theme-surface min-h-screen ${distractionFree ? themeClass : "bg-background"}`}>
       {!distractionFree && (
-        <div className={`mb-6 container mx-auto px-4 transition-[background-color,color,border-color,margin-bottom] duration-200 ease-out ${headerMinimized ? 'mb-2' : ''}`}>
+        <div className={`theme-surface mb-6 container mx-auto px-4 transition-[margin-bottom] duration-200 ease-out ${headerMinimized ? 'mb-2' : ''}`}>
           {/* Collapsible Header */}
           <div className={`flex items-center justify-between gap-2 transition-[margin-bottom,opacity] duration-200 ease-out ${
             headerMinimized ? 'mb-0' : 'mb-4'
@@ -972,7 +972,7 @@ export default function ReaderPage() {
             </h1>
             
             {/* Grouped Action Buttons */}
-            <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-1.5 shadow-sm transition-[background-color,border-color] duration-200 ease-out">
+            <div className="theme-surface flex items-center gap-2 bg-background border border-border rounded-lg p-1.5 shadow-sm">
               {/* Minimize/Expand Toggle */}
               <Button
                 variant="ghost"
@@ -1078,7 +1078,7 @@ export default function ReaderPage() {
           
           {/* Settings Panel - shown when not minimized */}
           {!headerMinimized && (
-            <div className="transition-all duration-300">
+            <div>
               <ReaderSettings
                 fontSize={fontSize}
                 fontFamily={fontFamily}
@@ -1108,7 +1108,7 @@ export default function ReaderPage() {
             variant="outline"
             size="lg"
             onClick={() => setDistractionFree(false)}
-            className="h-12 w-12 min-w-[48px] shadow-lg bg-background/90 backdrop-blur-sm"
+            className="theme-surface h-12 w-12 min-w-[48px] shadow-lg bg-background"
             aria-label="Show settings"
           >
             <Settings2 className="h-5 w-5" />
@@ -1116,9 +1116,9 @@ export default function ReaderPage() {
         </div>
       )}
 
-      <div className={`${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"} transition-colors duration-200`}>
+      <div className={`theme-surface ${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"}`}>
         <div
-          className={`${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} ${textColorClass} overflow-auto transition-[background-color,color,border-color] duration-200 ease-out ${distractionFree ? "" : "shadow-sm"}`}
+          className={`theme-surface ${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} ${textColorClass} overflow-auto ${distractionFree ? "" : "shadow-sm"}`}
           onMouseUp={() => {
             // Only handle mouseup for non-EPUB content
             // EPUB content handles selection via iframe events
@@ -1161,7 +1161,7 @@ export default function ReaderPage() {
                   </div>
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary transition-all duration-300"
+                      className="h-full bg-primary transition-[width] duration-300"
                       style={{ width: `${readingProgress}%` }}
                     />
                   </div>

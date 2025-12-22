@@ -306,19 +306,36 @@ html, body {
     background-color var(--theme-dur) var(--theme-ease),
     color var(--theme-dur) var(--theme-ease);
   will-change: background-color, color;
+  /* Force immediate synchronization */
+  transition-delay: 0s;
 }
 
-/* Apply theme transitions to major "surfaces" only */
+/* Apply theme transitions to major "surfaces" only - synchronized timing */
 .theme-surface {
+  /* Theme color transitions - must be synchronized */
   transition:
-    background-color var(--theme-dur) var(--theme-ease),
-    color var(--theme-dur) var(--theme-ease),
-    border-color var(--theme-dur) var(--theme-ease),
-    box-shadow var(--theme-dur) var(--theme-ease),
-    fill var(--theme-dur) var(--theme-ease),
-    stroke var(--theme-dur) var(--theme-ease);
+    background-color var(--theme-dur) var(--theme-ease) 0s,
+    color var(--theme-dur) var(--theme-ease) 0s,
+    border-color var(--theme-dur) var(--theme-ease) 0s,
+    box-shadow var(--theme-dur) var(--theme-ease) 0s,
+    fill var(--theme-dur) var(--theme-ease) 0s,
+    stroke var(--theme-dur) var(--theme-ease) 0s;
   /* Optimize for smooth transitions */
   will-change: background-color, color, border-color;
+}
+
+/* Override conflicting transition classes on theme surfaces - ensure synchronization */
+.theme-surface[class*="duration-"],
+.theme-surface[class*="transition-"] {
+  transition:
+    background-color var(--theme-dur) var(--theme-ease) 0s,
+    color var(--theme-dur) var(--theme-ease) 0s,
+    border-color var(--theme-dur) var(--theme-ease) 0s,
+    box-shadow var(--theme-dur) var(--theme-ease) 0s,
+    fill var(--theme-dur) var(--theme-ease) 0s,
+    stroke var(--theme-dur) var(--theme-ease) 0s,
+    /* Preserve other transitions like transform, opacity for hover effects */
+    transform, opacity;
 }
 
 /* Exclude certain elements from transitions for better performance */
