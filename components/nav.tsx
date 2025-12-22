@@ -69,7 +69,7 @@ export function Nav() {
             
             <Link 
               href="/" 
-              className="text-lg font-bold tracking-tight transition-colors hover:text-primary md:text-xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent"
+              className="text-lg font-bold tracking-tight transition-all duration-300 hover:text-primary md:text-xl bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent hover:scale-105 inline-block"
             >
               Reading Companion
             </Link>
@@ -84,10 +84,10 @@ export function Nav() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                      "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 relative",
                       isActive
                         ? "bg-primary text-primary-foreground shadow-soft"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground hover:text-foreground"
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -147,8 +147,8 @@ export function Nav() {
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all duration-200",
                         isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                          ? "bg-primary text-primary-foreground shadow-soft"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground hover:text-foreground"
                       )}
                     >
                       <Icon className="h-5 w-5" />

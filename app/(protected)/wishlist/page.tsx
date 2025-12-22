@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Plus, BookOpen, Trash2, Star, Edit2, Check, X, BookMarked } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "@/lib/toast"
 
 interface WishlistItem {
   id: string
@@ -74,6 +75,9 @@ export default function WishlistPage() {
         if (res.ok) {
           await fetchWishlist()
           resetForm()
+          toast.success("Wishlist updated!", `${title.trim()} has been updated.`)
+        } else {
+          toast.error("Failed to update", "Please try again.")
         }
       } else {
         // Create new item
@@ -91,6 +95,9 @@ export default function WishlistPage() {
         if (res.ok) {
           await fetchWishlist()
           resetForm()
+          toast.success("Added to wishlist!", `${title.trim()} has been added to your wishlist.`)
+        } else {
+          toast.error("Failed to add", "Please try again.")
         }
       }
     } catch (error) {
@@ -101,6 +108,7 @@ export default function WishlistPage() {
   }
 
   const handleDelete = async (id: string) => {
+    const item = items.find(i => i.id === id)
     if (!confirm("Are you sure you want to remove this from your wishlist?")) {
       return
     }
@@ -111,9 +119,13 @@ export default function WishlistPage() {
       })
       if (res.ok) {
         await fetchWishlist()
+        toast.success("Removed from wishlist", item ? `${item.title} has been removed.` : undefined)
+      } else {
+        toast.error("Failed to remove", "Please try again.")
       }
     } catch (error) {
       console.error("Error deleting wishlist item:", error)
+      toast.error("Failed to remove", "An error occurred. Please try again.")
     }
   }
 
@@ -166,22 +178,48 @@ export default function WishlistPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>
+    return (
+      <div className="max-w-7xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Loading your wishlist...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 md:mb-12">
-        <div>
-          <h1 className="text-3xl font-bold mb-2 tracking-tight md:text-4xl">My Wishlist</h1>
-          <p className="text-muted-foreground text-base">
-            {items.length} {items.length === 1 ? "book" : "books"} in your wishlist
-          </p>
+    <div className="max-w-7xl mx-auto px-4 md:px-6 page-transition">
+      <div className="mb-10 lg:mb-12 fade-in">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+          <div>
+            <div className="inline-block mb-3">
+              <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
+                Your Reading Goals
+              </span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">My Wishlist</h1>
+            <p className="text-muted-foreground text-lg">
+              {items.length === 0 ? (
+                "Start building your reading wishlist"
+              ) : (
+                <>
+                  {items.length} {items.length === 1 ? "treasure" : "treasures"} waiting to be explored
+                </>
+              )}
+            </p>
+          </div>
+          <Button 
+            onClick={() => setShowForm(!showForm)} 
+            size="lg" 
+            className="shrink-0 shadow-soft font-semibold hover:shadow-elevated transition-all interactive-scale"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Book
+          </Button>
         </div>
-        <Button onClick={() => setShowForm(!showForm)} size="lg" className="shrink-0">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Book
-        </Button>
       </div>
 
       {/* Search and Filter */}
@@ -292,22 +330,39 @@ export default function WishlistPage() {
 
       {/* Wishlist Items */}
       {filteredItems.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <BookMarked className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">
+        <Card className="border-dashed">
+          <CardContent className="py-16 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-pink-500/10 to-pink-500/5 mb-5 pulse-subtle">
+              <BookMarked className="h-10 w-10 text-pink-600/60 dark:text-pink-400/60" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">
               {items.length === 0
-                ? "Your wishlist is empty. Add books you want to read!"
-                : "No books match your search."}
+                ? "Your wishlist is empty"
+                : "No books match your search"}
+            </h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              {items.length === 0
+                ? "Start building your reading wishlist. Add books that spark your curiosity and inspire your learning journey."
+                : "Try adjusting your search terms or filters to find what you're looking for."}
             </p>
+            {items.length === 0 && (
+              <Button 
+                onClick={() => setShowForm(true)} 
+                size="default" 
+                className="font-medium shadow-soft hover:shadow-elevated transition-all"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Your First Book
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredItems.map((item) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
+          {filteredItems.map((item, index) => (
             <Card
               key={item.id}
-              className="hover:shadow-lg transition-all duration-200 border-l-4"
+              className="group hover:shadow-elevated transition-all duration-300 border-l-4 interactive-scale hover-lift-smooth"
               style={{
                 borderLeftColor:
                   item.priority > 0
@@ -315,6 +370,7 @@ export default function WishlistPage() {
                     : item.priority < 0
                     ? "rgb(156 163 175)"
                     : "rgb(59 130 246)",
+                animationDelay: `${index * 30}ms`,
               }}
             >
               <CardHeader>

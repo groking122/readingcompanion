@@ -230,39 +230,67 @@ export default function ReviewPage() {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-        <p className="text-muted-foreground">Loading exercises...</p>
+      <div className="max-w-4xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Preparing your review session...</p>
+        </div>
       </div>
     )
   }
 
   if (flashcards.length === 0) {
     return (
-      <div className="text-center py-12">
-        <RotateCcw className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-        <h2 className="text-2xl font-bold mb-2">All caught up!</h2>
-        <p className="text-muted-foreground">
-          You have no flashcards due for review.
-        </p>
+      <div className="max-w-4xl mx-auto page-transition">
+        <div className="text-center py-16 fade-in">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500/10 to-green-500/5 mb-5 pulse-subtle">
+            <RotateCcw className="h-10 w-10 text-green-600/60 dark:text-green-400/60" />
+          </div>
+          <h2 className="text-2xl md:text-3xl font-bold mb-3 tracking-tight">All caught up!</h2>
+          <p className="text-muted-foreground text-lg mb-6 max-w-md mx-auto">
+            You've completed all your reviews for now. Keep reading to discover new words and continue your learning journey.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <a href="/library">
+              <Button size="default" className="font-medium shadow-soft hover:shadow-elevated transition-all">
+                Continue Reading
+              </Button>
+            </a>
+            <a href="/vocab">
+              <Button variant="outline" size="default" className="font-medium">
+                View Vocabulary
+              </Button>
+            </a>
+          </div>
+        </div>
       </div>
     )
   }
 
   if (!currentExercise) {
     return (
-      <div className="text-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-        <p className="text-muted-foreground">Preparing exercise...</p>
+      <div className="max-w-4xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Preparing your next exercise...</p>
+        </div>
       </div>
     )
   }
 
   if (updating) {
     return (
-      <div className="text-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-        <p className="text-muted-foreground">Saving progress...</p>
+      <div className="max-w-4xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Saving your progress...</p>
+        </div>
       </div>
     )
   }
@@ -309,18 +337,35 @@ export default function ReviewPage() {
     }
   }
 
+  const progressPercentage = ((currentIndex + 1) / flashcards.length) * 100
+
   return (
-    <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold mb-3 tracking-tight md:text-4xl">Review</h1>
-        <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-          <span>Exercise {currentIndex + 1} of {flashcards.length}</span>
-          <span>•</span>
-          <span>{flashcards.length} {flashcards.length === 1 ? "item" : "items"} due</span>
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 page-transition">
+      <div className="mb-8 fade-in">
+        <div className="text-center mb-6">
+          <div className="inline-block mb-4">
+            <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
+              Practice Session
+            </span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">Review</h1>
+          <p className="text-muted-foreground text-lg mb-6">
+            Exercise {currentIndex + 1} of {flashcards.length}
+          </p>
+        </div>
+        
+        {/* Progress Bar */}
+        <div className="w-full bg-muted/50 rounded-full h-2 mb-8 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 rounded-full transition-all duration-500 ease-out shadow-soft"
+            style={{ width: `${progressPercentage}%` }}
+          />
         </div>
       </div>
 
-      {renderExercise()}
+      <div className="fade-in-delay">
+        {renderExercise()}
+      </div>
     </div>
   )
 }

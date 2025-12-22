@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Search, Heart, BookOpen, Sparkles, Check } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "@/lib/toast"
 
 interface SuggestedBook {
   title: string
@@ -70,20 +71,10 @@ export default function SuggestedBooksPage() {
         }),
       })
       if (res.ok) {
-        // Show success feedback
-        const button = document.querySelector(`[data-book-key="${bookKey}"][data-action="wishlist"]`)
-        if (button) {
-          const originalHTML = button.innerHTML
-          button.innerHTML = '<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Added!'
-          button.classList.add("bg-green-500", "hover:bg-green-600")
-          setTimeout(() => {
-            button.innerHTML = originalHTML
-            button.classList.remove("bg-green-500", "hover:bg-green-600")
-          }, 2000)
-        }
+        toast.success("Added to wishlist!", `${book.title} has been added to your wishlist.`)
       } else {
         const data = await res.json()
-        alert(data.error || "Failed to add to wishlist")
+        toast.error("Failed to add to wishlist", data.error || "Please try again.")
       }
     } catch (error) {
       console.error("Error adding to wishlist:", error)
@@ -95,7 +86,7 @@ export default function SuggestedBooksPage() {
 
   const handleAddToLibrary = async (book: SuggestedBook) => {
     if (!book.githubUrl) {
-      alert("This book is not available as an EPUB file. It might be a PDF or in a folder structure.")
+      toast.warning("EPUB not available", "This book is not available as an EPUB file. It might be a PDF or in a folder structure.")
       return
     }
 
@@ -114,24 +105,13 @@ export default function SuggestedBooksPage() {
       })
       
       if (res.ok) {
-        const data = await res.json()
-        // Show success feedback
-        const button = document.querySelector(`[data-book-key="${bookKey}"][data-action="library"]`)
-        if (button) {
-          const originalHTML = button.innerHTML
-          button.innerHTML = '<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Added!'
-          button.classList.add("bg-green-500", "hover:bg-green-600")
-          setTimeout(() => {
-            button.innerHTML = originalHTML
-            button.classList.remove("bg-green-500", "hover:bg-green-600")
-          }, 2000)
-        }
+        toast.success("Book added!", `${book.title} has been added to your library.`)
       } else {
         const data = await res.json()
         if (res.status === 409) {
-          alert("This book is already in your library!")
+          toast.info("Already in library", "This book is already in your library!")
         } else {
-          alert(data.error || "Failed to add book to library. The EPUB file might not be available or the book might be in a folder.")
+          toast.error("Failed to add book", data.error || "The EPUB file might not be available.")
         }
       }
     } catch (error) {
@@ -143,20 +123,34 @@ export default function SuggestedBooksPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading suggested books...</div>
+    return (
+      <div className="max-w-7xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Discovering great books for you...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-6">
-      <div className="mb-8 md:mb-12">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="rounded-lg bg-primary/10 p-2">
+    <div className="max-w-7xl mx-auto px-4 md:px-6 page-transition">
+      <div className="mb-10 lg:mb-12 fade-in">
+        <div className="inline-block mb-4">
+          <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
+            Discover
+          </span>
+        </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 p-3 shadow-soft">
             <Sparkles className="h-6 w-6 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Suggested Books</h1>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Suggested Books</h1>
         </div>
-        <p className="text-muted-foreground text-base md:text-lg ml-[3.5rem]">
-          Curated collection of books to explore. Add them to your wishlist to read later!
+        <p className="text-muted-foreground text-lg max-w-2xl">
+          Curated collection of books to explore. Each one is a gateway to new knowledge and insights. Add them to your wishlist to read later!
         </p>
       </div>
 
@@ -189,36 +183,57 @@ export default function SuggestedBooksPage() {
 
       {/* Books Grid */}
       {books.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">
+        <Card className="border-dashed">
+          <CardContent className="py-16 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 mb-5 pulse-subtle">
+              <BookOpen className="h-10 w-10 text-blue-600/60 dark:text-blue-400/60" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">
               {searchTerm || selectedCategory !== "all"
-                ? "No books match your search. Try different keywords or categories."
-                : "No books available."}
+                ? "No books match your search"
+                : "No books available"}
+            </h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              {searchTerm || selectedCategory !== "all"
+                ? "Try adjusting your search terms or filters to discover new books."
+                : "Check back soon for new book recommendations."}
             </p>
+            {(searchTerm || selectedCategory !== "all") && (
+              <Button 
+                variant="outline" 
+                size="default" 
+                className="font-medium"
+                onClick={() => {
+                  setSearchTerm("")
+                  setSelectedCategory("all")
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {books.length} {books.length === 1 ? "book" : "books"}
+          <div className="mb-6 text-sm text-muted-foreground fade-in-delay">
+            Showing {books.length} {books.length === 1 ? "treasure" : "treasures"} waiting to be discovered
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
             {books.map((book, index) => {
               const bookKey = `${book.title}-${book.author}`
               return (
                 <Card
                   key={`${book.title}-${index}`}
-                  className="hover:shadow-lg transition-all duration-200 border-l-4"
+                  className="group hover:shadow-elevated transition-all duration-300 border-l-4 interactive-scale hover-lift-smooth"
                   style={{
                     borderLeftColor: getCategoryColor(book.category),
+                    animationDelay: `${index * 30}ms`,
                   }}
                 >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg line-clamp-2 mb-1">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors font-semibold">
                           {book.title}
                         </CardTitle>
                         <CardDescription className="text-sm">
@@ -226,9 +241,9 @@ export default function SuggestedBooksPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    <div className="mt-2">
+                    <div className="mt-3">
                       <span
-                        className="px-2 py-1 rounded-full text-xs font-medium"
+                        className="px-2.5 py-1 rounded-full text-xs font-medium inline-block"
                         style={{
                           backgroundColor: `${getCategoryColor(book.category)}20`,
                           color: getCategoryColor(book.category),
@@ -241,7 +256,7 @@ export default function SuggestedBooksPage() {
                   <CardContent className="space-y-2">
                     {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
                       <Button
-                        className="w-full"
+                        className="w-full font-medium shadow-soft hover:shadow-elevated transition-all"
                         onClick={() => handleAddToLibrary(book)}
                         disabled={addingToLibrary === bookKey}
                         data-book-key={bookKey}
@@ -251,12 +266,12 @@ export default function SuggestedBooksPage() {
                         {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB to Library"}
                       </Button>
                     ) : (
-                      <div className="text-xs text-muted-foreground text-center py-2">
+                      <div className="text-xs text-muted-foreground text-center py-2 px-3 rounded-md bg-muted/30">
                         EPUB not directly available
                       </div>
                     )}
                     <Button
-                      className="w-full"
+                      className="w-full font-medium transition-all hover:bg-accent/50"
                       variant="outline"
                       onClick={() => handleAddToWishlist(book)}
                       disabled={addingToWishlist === bookKey}

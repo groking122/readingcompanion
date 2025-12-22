@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/lib/toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -132,6 +134,7 @@ export default function VocabPage() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    toast.success("Export complete!", `Exported ${exportData.length} words to JSON file.`)
   }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,7 +162,7 @@ export default function VocabPage() {
             return obj
           })
       } else {
-        alert('Unsupported file format. Please use JSON or CSV.')
+        toast.error("Unsupported file format", "Please use JSON or CSV files.")
         return
       }
 
@@ -183,13 +186,13 @@ export default function VocabPage() {
           const newBook = await createBookRes.json()
           importBookId = newBook.id
         } else {
-          alert("Failed to create book for imported words")
+          toast.error("Failed to create book", "Could not create a book for imported words.")
           return
         }
       }
 
       if (!importBookId) {
-        alert("Please select a book or create one first")
+        toast.error("No book selected", "Please select a book or create one first.")
         return
       }
 
@@ -221,14 +224,21 @@ export default function VocabPage() {
         }
       }
 
-      alert(`Imported ${imported} words${failed > 0 ? `, ${failed} failed` : ''}`)
+      if (imported > 0) {
+        toast.success(
+          `Imported ${imported} words`,
+          failed > 0 ? `${failed} words failed to import.` : undefined
+        )
+      } else {
+        toast.error("Import failed", "No words were imported. Please check your file format.")
+      }
       await fetchData()
       
       // Reset file input
       e.target.value = ''
     } catch (error) {
       console.error("Import error:", error)
-      alert("Failed to import file. Please check the format.")
+      toast.error("Import failed", "Failed to import file. Please check the format.")
     }
   }
 
@@ -270,43 +280,72 @@ export default function VocabPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>
+    return (
+      <div className="max-w-4xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Loading your vocabulary...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">My Vocabulary</h1>
-          <p className="text-muted-foreground">
-            {vocab.length} {vocab.length === 1 ? "word" : "words"} saved
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={vocab.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => document.getElementById('import-file')?.click()}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
-          <input
-            id="import-file"
-            type="file"
-            accept=".json,.csv"
-            className="hidden"
-            onChange={handleImport}
-          />
+    <div className="max-w-4xl mx-auto page-transition">
+      <div className="mb-8 fade-in">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div>
+            <div className="inline-block mb-3">
+              <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
+                Your Words
+              </span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2 tracking-tight">My Vocabulary</h1>
+            <p className="text-muted-foreground text-lg">
+              {vocab.length === 0 ? (
+                "Start building your vocabulary"
+              ) : (
+                <>
+                  {vocab.length} {vocab.length === 1 ? "word" : "words"} saved
+                  {filteredVocab.length !== vocab.length && (
+                    <span className="ml-2 text-sm">
+                      ({filteredVocab.length} {filteredVocab.length === 1 ? "shown" : "shown"})
+                    </span>
+                  )}
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={vocab.length === 0}
+              className="transition-all hover:bg-accent/50"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('import-file')?.click()}
+              className="transition-all hover:bg-accent/50"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <input
+              id="import-file"
+              type="file"
+              accept=".json,.csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </div>
         </div>
       </div>
 
@@ -338,19 +377,45 @@ export default function VocabPage() {
       </div>
 
       {filteredVocab.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">
+        <Card className="border-dashed">
+          <CardContent className="py-16 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/5 mb-5 pulse-subtle">
+              <BookMarked className="h-10 w-10 text-purple-600/60 dark:text-purple-400/60" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">
               {vocab.length === 0
-                ? "No vocabulary saved yet. Start reading and save words!"
-                : "No words match your search."}
+                ? "Your vocabulary collection is empty"
+                : "No words match your search"}
+            </h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              {vocab.length === 0
+                ? "As you read, save words that catch your attention. Each one is a step toward fluency."
+                : "Try adjusting your search terms or filters to find what you're looking for."}
             </p>
+            {vocab.length === 0 ? (
+              <Link href="/library">
+                <Button size="default" className="font-medium shadow-soft hover:shadow-elevated transition-all">
+                  Start Reading
+                </Button>
+              </Link>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="default" 
+                className="font-medium"
+                onClick={() => {
+                  setSearchTerm("")
+                  setSelectedBookId("all")
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredVocab.map((item) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 fade-in-delay">
+          {filteredVocab.map((item, index) => {
             const book = books.find((b) => b.id === item.bookId)
             const savedDate = new Date(item.createdAt)
             const daysSinceSaved = Math.floor((Date.now() - savedDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -358,18 +423,24 @@ export default function VocabPage() {
             const isDue = nextReview && nextReview <= new Date()
             
             return (
-              <Card key={item.id} className="hover:shadow-md transition-shadow">
+              <Card 
+                key={item.id} 
+                className="group hover:shadow-elevated transition-all duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth"
+                style={{ animationDelay: `${index * 30}ms` }}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg mb-1 break-words">{item.term}</CardTitle>
-                      <CardDescription className="text-base font-medium text-foreground mt-1">
+                      <CardTitle className="text-lg mb-1.5 break-words group-hover:text-primary transition-colors font-semibold">
+                        {item.term}
+                      </CardTitle>
+                      <CardDescription className="text-base font-medium text-foreground/90 mt-1.5">
                         {item.translation}
                       </CardDescription>
                     </div>
                     {isDue && (
                       <div className="flex-shrink-0">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 animate-pulse">
                           Due
                         </span>
                       </div>

@@ -12,6 +12,7 @@ import { TocDrawer, type TocItem } from "@/components/toc-drawer"
 import { TranslationDrawer } from "@/components/translation-drawer"
 import { TranslationPopover } from "@/components/translation-popover"
 import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
+import { toast } from "@/lib/toast"
 
 // Component to highlight search term in text content
 function SearchHighlight({ searchTerm }: { searchTerm: string }) {
@@ -741,6 +742,13 @@ export default function ReaderPage() {
         const data = await response.json()
         setSavedWordId(data.id)
         
+        // Show toast notification
+        const isPhrase = selectedText.split(/\s+/).length > 1
+        toast.success(
+          isPhrase ? "Phrase saved!" : "Word saved!",
+          `${selectedText} has been added to your vocabulary.`
+        )
+        
         // Show saved feedback - keep popover open briefly to show success
         // Auto-close after 2 seconds
         setTimeout(() => {
@@ -756,6 +764,7 @@ export default function ReaderPage() {
       }
     } catch (error) {
       console.error("Error saving word:", error)
+      toast.error("Failed to save", "An error occurred while saving. Please try again.")
     } finally {
       setSaving(false)
     }
@@ -785,7 +794,13 @@ export default function ReaderPage() {
       handleMouseMove = (e: MouseEvent) => {
         const newX = Math.max(160, Math.min(window.innerWidth - 160, e.clientX - dragOffset.x))
         const newY = Math.max(100, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y))
-        setPopoverPosition({ x: newX, y: newY })
+        // Preserve width and height when updating position
+        setPopoverPosition((prev) => ({
+          x: newX,
+          y: newY,
+          width: prev?.width || 0,
+          height: prev?.height || 0,
+        }))
       }
 
       handleMouseUp = () => {
@@ -881,9 +896,13 @@ export default function ReaderPage() {
                     if (res.ok) {
                       const newBookmark = await res.json()
                       setBookmarks([...bookmarks, newBookmark])
+                      toast.success("Bookmark added!", "You can return to this location anytime.")
+                    } else {
+                      toast.error("Failed to add bookmark", "Please try again.")
                     }
                   } catch (error) {
                     console.error("Error creating bookmark:", error)
+                    toast.error("Failed to add bookmark", "An error occurred.")
                   }
                 }}
                 className="h-12 min-w-[48px]"
@@ -1328,8 +1347,10 @@ export default function ReaderPage() {
                             setTranslation("")
                             setAlternativeTranslations([])
                             setSavedWordId(null)
+                            toast.success("Undone", "Word has been removed from your vocabulary.")
                           } catch (error) {
                             console.error("Failed to undo save:", error)
+                            toast.error("Failed to undo", "Could not remove the word. Please try again.")
                           }
                         }
                       }}
@@ -1454,8 +1475,10 @@ export default function ReaderPage() {
                 setAlternativeTranslations([])
                 setSavedWordId(null)
                 setPopoverPosition(undefined)
+                toast.success("Marked as known", `${selectedText} won't show in future lookups.`)
               } catch (error) {
                 console.error("Failed to mark as known:", error)
+                toast.error("Failed to mark as known", "Please try again.")
               }
             }}
             onUndo={async () => {
@@ -1470,8 +1493,10 @@ export default function ReaderPage() {
                   setAlternativeTranslations([])
                   setSavedWordId(null)
                   setPopoverPosition(undefined)
+                  toast.success("Undone", "Word has been removed from your vocabulary.")
                 } catch (error) {
                   console.error("Failed to undo save:", error)
+                  toast.error("Failed to undo", "Could not remove the word. Please try again.")
                 }
               }
             }}
@@ -1523,8 +1548,10 @@ export default function ReaderPage() {
                 if (lastFocusRef.current) {
                   lastFocusRef.current.focus()
                 }
+                toast.success("Marked as known", `${selectedText} won't show in future lookups.`)
               } catch (error) {
                 console.error("Failed to mark as known:", error)
+                toast.error("Failed to mark as known", "Please try again.")
               }
             }}
             onUndo={async () => {
@@ -1542,8 +1569,10 @@ export default function ReaderPage() {
                   if (lastFocusRef.current) {
                     lastFocusRef.current.focus()
                   }
+                  toast.success("Undone", "Word has been removed from your vocabulary.")
                 } catch (error) {
                   console.error("Failed to undo save:", error)
+                  toast.error("Failed to undo", "Could not remove the word. Please try again.")
                 }
               }
             }}

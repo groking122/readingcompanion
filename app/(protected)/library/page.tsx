@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Plus, BookOpen, Trash2, Heart } from "lucide-react"
 import Link from "next/link"
+import { toast } from "@/lib/toast"
 
 interface Book {
   id: string
@@ -78,6 +79,9 @@ export default function LibraryPage() {
                 setShowForm(false)
                 setTitle("")
                 setFile(null)
+                toast.success("Book added!", "Your EPUB has been added to your library.")
+              } else {
+                toast.error("Failed to add book", "Please try again.")
               }
             } else if (fileExtension === "pdf") {
               // Extract text from PDF and store as text content
@@ -107,21 +111,24 @@ export default function LibraryPage() {
                   setShowForm(false)
                   setTitle("")
                   setFile(null)
+                  toast.success("Book added!", "Your PDF has been converted and added to your library.")
+                } else {
+                  toast.error("Failed to add book", "Please try again.")
                 }
               } else {
                 const errorData = await extractRes.json().catch(() => ({}))
                 if (errorData.error === "SCANNED_PDF") {
-                  alert(
-                    "This PDF appears to be scanned (image-based) and doesn't contain selectable text.\n\n" +
-                    "OCR (Optical Character Recognition) would be needed to extract text from it.\n\n" +
-                    "Please upload a PDF with selectable text, or use an EPUB file instead."
+                  toast.error(
+                    "Scanned PDF detected",
+                    "This PDF appears to be image-based. Please upload a PDF with selectable text, or use an EPUB file instead.",
+                    8000
                   )
                 } else {
-                  alert(errorData.message || "Failed to extract text from PDF. Please try again.")
+                  toast.error("Failed to extract text", errorData.message || "Please try again.")
                 }
               }
             } else {
-              alert("Unsupported file type. Please upload EPUB or PDF.")
+              toast.error("Unsupported file type", "Please upload EPUB or PDF.")
             }
           } catch (error) {
             console.error("Error processing file:", error)
@@ -145,6 +152,9 @@ export default function LibraryPage() {
           setShowForm(false)
           setTitle("")
           setContent("")
+          toast.success("Book created!", "Your book has been added to your library.")
+        } else {
+          toast.error("Failed to create book", "Please try again.")
         }
       }
     } catch (error) {
@@ -169,18 +179,10 @@ export default function LibraryPage() {
         }),
       })
       if (res.ok) {
-        // Show success feedback
-        const button = document.querySelector(`[data-book-id="${book.id}"]`)
-        if (button) {
-          const originalText = button.textContent
-          button.textContent = "Added!"
-          setTimeout(() => {
-            button.textContent = originalText
-          }, 2000)
-        }
+        toast.success("Added to wishlist!", `${book.title} has been added to your wishlist.`)
       } else {
         const data = await res.json()
-        alert(data.error || "Failed to add to wishlist")
+        toast.error("Failed to add to wishlist", data.error || "Please try again.")
       }
     } catch (error) {
       console.error("Error adding to wishlist:", error)
@@ -202,20 +204,30 @@ export default function LibraryPage() {
       })
       if (res.ok) {
         await fetchBooks()
+        toast.success("Book deleted", "The book and its associated vocabulary have been removed.")
       } else {
         const data = await res.json()
-        alert(data.error || "Failed to delete book")
+        toast.error("Failed to delete book", data.error || "Please try again.")
       }
     } catch (error) {
       console.error("Error deleting book:", error)
-      alert("Failed to delete book")
+      toast.error("Failed to delete book", "An error occurred. Please try again.")
     } finally {
       setDeleting(null)
     }
   }
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>
+    return (
+      <div className="max-w-7xl mx-auto page-transition">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+          </div>
+          <p className="text-muted-foreground font-medium">Loading your library...</p>
+        </div>
+      </div>
+    )
   }
 
   const filteredBooks = selectedCategory === "all" 
@@ -225,20 +237,30 @@ export default function LibraryPage() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-10 lg:mb-12">
+      <div className="mb-10 lg:mb-12 fade-in">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
           <div>
-            <div className="inline-block mb-3">
-              <span className="text-sm font-medium px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+            <div className="inline-block mb-4">
+              <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
                 Your Collection
               </span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">My Library</h1>
             <p className="text-lg text-muted-foreground">
-              {filteredBooks.length} {filteredBooks.length === 1 ? "item" : "items"} in your collection
+              {filteredBooks.length === 0 ? (
+                "Start building your collection"
+              ) : (
+                <>
+                  {filteredBooks.length} {filteredBooks.length === 1 ? "treasure" : "treasures"} waiting to be explored
+                </>
+              )}
             </p>
           </div>
-          <Button onClick={() => setShowForm(!showForm)} size="lg" className="shadow-soft font-semibold">
+          <Button 
+            onClick={() => setShowForm(!showForm)} 
+            size="lg" 
+            className="shadow-soft font-semibold hover:shadow-elevated transition-all interactive-scale"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Add {selectedCategory === "note" ? "Note" : "Book"}
           </Button>
@@ -373,29 +395,63 @@ export default function LibraryPage() {
       )}
 
       {filteredBooks.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">
+        <Card className="border-dashed">
+          <CardContent className="py-16 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 mb-5 pulse-subtle">
+              <BookOpen className="h-10 w-10 text-primary/60" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">
               {books.length === 0 
-                ? `No ${selectedCategory === "note" ? "notes" : "books"} yet. Add your first ${selectedCategory === "note" ? "note" : "book"} to get started!`
-                : `No ${selectedCategory === "note" ? "notes" : "books"} in this category.`}
+                ? `Your ${selectedCategory === "note" ? "notes" : "library"} is empty`
+                : `No ${selectedCategory === "note" ? "notes" : "books"} in this category`}
+            </h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              {books.length === 0 
+                ? `Every great reading journey begins with a single ${selectedCategory === "note" ? "note" : "book"}. Add your first one to start learning.`
+                : `Try switching to a different category or add a new ${selectedCategory === "note" ? "note" : "book"}.`}
             </p>
+            <Button 
+              onClick={() => setShowForm(true)} 
+              size="default" 
+              className="font-medium shadow-soft hover:shadow-elevated transition-all"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Your First {selectedCategory === "note" ? "Note" : "Book"}
+            </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredBooks.map((book) => (
-            <Card key={book.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="line-clamp-2">{book.title}</CardTitle>
-                <CardDescription>
-                  {new Date(book.createdAt).toLocaleDateString()}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
+          {filteredBooks.map((book, index) => (
+            <Card 
+              key={book.id} 
+              className="group hover:shadow-elevated transition-all duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <CardHeader className="pb-4">
+                <CardTitle className="line-clamp-2 text-lg font-semibold group-hover:text-primary transition-colors">
+                  {book.title}
+                </CardTitle>
+                <CardDescription className="flex items-center gap-2 mt-2">
+                  <span className="text-xs">
+                    {new Date(book.createdAt).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </span>
+                  {book.category === "note" && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      Note
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-3">
                 <Link href={`/reader/${book.id}`}>
-                  <Button className="w-full">Open Book</Button>
+                  <Button className="w-full font-medium shadow-soft hover:shadow-elevated transition-all">
+                    Open {book.category === "note" ? "Note" : "Book"}
+                  </Button>
                 </Link>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
@@ -404,8 +460,9 @@ export default function LibraryPage() {
                     onClick={() => handleAddToWishlist(book)}
                     disabled={addingToWishlist === book.id}
                     data-book-id={book.id}
+                    className="transition-all hover:bg-accent/50"
                   >
-                    <Heart className="h-3 w-3 mr-1" />
+                    <Heart className="h-3.5 w-3.5 mr-1.5" />
                     {addingToWishlist === book.id ? "Adding..." : "Wishlist"}
                   </Button>
                   <Button
@@ -413,9 +470,10 @@ export default function LibraryPage() {
                     size="sm"
                     onClick={() => handleDelete(book.id)}
                     disabled={deleting === book.id}
+                    className="transition-all hover:bg-destructive/90"
                   >
-                    <Trash2 className="h-3 w-3" />
-                    {deleting === book.id ? "..." : ""}
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {deleting === book.id ? "..." : "Delete"}
                   </Button>
                 </div>
               </CardContent>
