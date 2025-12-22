@@ -429,7 +429,7 @@ export default function LibraryPage() {
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <CardHeader className="pb-4">
-                <CardTitle className="line-clamp-2 text-lg font-semibold group-hover:text-primary transition-colors">
+                <CardTitle className="line-clamp-2 text-lg font-semibold group-hover:text-primary transition-colors duration-300">
                   {book.title}
                 </CardTitle>
                 <CardDescription className="flex items-center gap-2 mt-2">

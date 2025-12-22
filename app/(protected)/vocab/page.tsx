@@ -431,7 +431,7 @@ export default function VocabPage() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg mb-1.5 break-words group-hover:text-primary transition-colors font-semibold">
+                      <CardTitle className="text-lg mb-1.5 break-words group-hover:text-primary transition-colors duration-300 font-semibold">
                         {item.term}
                       </CardTitle>
                       <CardDescription className="text-base font-medium text-foreground/90 mt-1.5">

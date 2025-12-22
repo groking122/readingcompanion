@@ -233,7 +233,7 @@ export default function SuggestedBooksPage() {
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors font-semibold">
+                        <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors duration-300 font-semibold">
                           {book.title}
                         </CardTitle>
                         <CardDescription className="text-sm">

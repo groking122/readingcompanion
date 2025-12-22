@@ -318,15 +318,19 @@ html * {
   transition-delay: 0s;
 }
 
-/* Ensure body and main containers transition together */
+/* Ensure body and main containers transition together with synchronized timing */
 body,
 body > *,
 [class*="bg-background"],
 [class*="bg-card"],
-[class*="bg-muted"] {
+[class*="bg-muted"],
+[class*="bg-white"],
+[class*="bg-\["],
+.container,
+[class*="border"] {
   transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0s,
               color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0s,
-              border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0s;
+              border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0s !important;
 }
 
 /* Smooth theme button transition */

@@ -957,22 +957,22 @@ export default function ReaderPage() {
   const textColorClass = theme === "dark" ? "text-[#e0e0e0]" : "text-foreground"
 
   return (
-    <div className={`min-h-screen transition-colors duration-200 ${distractionFree ? themeClass : "bg-background"}`}>
+    <div className={`min-h-screen transition-[background-color,color] duration-200 ease-out ${distractionFree ? themeClass : "bg-background"}`}>
       {!distractionFree && (
-        <div className={`mb-6 container mx-auto px-4 transition-all duration-300 ${headerMinimized ? 'mb-2' : ''}`}>
+        <div className={`mb-6 container mx-auto px-4 transition-[background-color,color,border-color,margin-bottom] duration-200 ease-out ${headerMinimized ? 'mb-2' : ''}`}>
           {/* Collapsible Header */}
-          <div className={`flex items-center justify-between gap-2 transition-all duration-300 ${
+          <div className={`flex items-center justify-between gap-2 transition-[margin-bottom,opacity] duration-200 ease-out ${
             headerMinimized ? 'mb-0' : 'mb-4'
           }`}>
             {/* Title - hidden when minimized */}
-            <h1 className={`text-2xl font-bold flex-1 truncate transition-all duration-300 ${
+            <h1 className={`text-2xl font-bold flex-1 truncate transition-[opacity,max-width] duration-200 ease-out ${
               headerMinimized ? 'opacity-0 max-w-0 overflow-hidden' : 'opacity-100 max-w-full'
             }`}>
               {book.title}
             </h1>
             
             {/* Grouped Action Buttons */}
-            <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-1.5 shadow-sm">
+            <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-1.5 shadow-sm transition-[background-color,border-color] duration-200 ease-out">
               {/* Minimize/Expand Toggle */}
               <Button
                 variant="ghost"
@@ -1116,9 +1116,9 @@ export default function ReaderPage() {
         </div>
       )}
 
-      <div className={`${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"}`}>
+      <div className={`${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"} transition-colors duration-200`}>
         <div
-          className={`${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} ${textColorClass} overflow-auto transition-colors duration-200 ${distractionFree ? "" : "shadow-sm"}`}
+          className={`${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} ${textColorClass} overflow-auto transition-[background-color,color,border-color] duration-200 ease-out ${distractionFree ? "" : "shadow-sm"}`}
           onMouseUp={() => {
             // Only handle mouseup for non-EPUB content
             // EPUB content handles selection via iframe events
