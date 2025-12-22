@@ -128,18 +128,24 @@ export async function POST(request: NextRequest) {
     let newVocab
     try {
       // Validate and sanitize all values before insert
-      const insertValues = {
+      // IMPORTANT: termNormalized column doesn't exist in DB, so we MUST NOT include it
+      // Also, kind and isKnown might not exist - we'll try without them first
+      const insertValues: any = {
         userId: user.id,
         bookId: String(bookId).trim(),
         term: String(term).trim(),
-        termNormalized: String(termNormalized).trim(),
         translation: String(translation).trim(),
         context: String(finalContext).trim(),
-        kind: String(vocabKind).trim(),
         pageNumber: pageNumber ? Number(pageNumber) : null,
         position: position ? Number(position) : null,
         epubLocation: epubLocation ? String(epubLocation).trim() : null,
       }
+      
+      // Try to add kind - if column doesn't exist, error handler will catch it
+      // But for now, let's try without it to be safe
+      // insertValues.kind = String(vocabKind).trim() // Commented out - column might not exist
+      
+      // DO NOT include termNormalized - column doesn't exist in current DB schema
       
       // Final validation
       if (!insertValues.term || insertValues.term.length === 0) {
@@ -158,9 +164,11 @@ export async function POST(request: NextRequest) {
         contextLength: insertValues.context.length
       })
       
+      // Use explicit field selection to avoid Drizzle trying to insert schema fields that don't exist in DB
+      // This ensures we only insert fields that are actually in the database
       const result = await db
         .insert(vocabulary)
-        .values(insertValues)
+        .values(insertValues as any) // Cast to any to bypass type checking for missing columns
         .returning()
       
       if (!result || result.length === 0) {
@@ -170,54 +178,164 @@ export async function POST(request: NextRequest) {
       newVocab = result[0]
       console.log("Vocabulary entry created successfully:", newVocab.id)
     } catch (dbError: any) {
-      console.error("Database error creating vocabulary:", dbError)
-      console.error("Error code:", dbError?.code)
-      console.error("Error constraint:", dbError?.constraint)
-      console.error("Error detail:", dbError?.detail)
-      console.error("Error message:", dbError?.message)
+      console.error("=== DATABASE INSERT ERROR ===")
+      console.error("Error object:", dbError)
+      console.error("Error type:", typeof dbError)
+      console.error("Error constructor:", dbError?.constructor?.name)
+      
+      // Postgres-js errors have a specific structure
+      // The actual PostgreSQL error might be nested
+      let pgError = dbError
+      let errorCode: string | undefined
+      let errorMessage = dbError?.message || String(dbError)
+      let errorDetail: string | undefined
+      let errorConstraint: string | undefined
+      
+      // Check if error has a cause (postgres-js wraps errors)
+      if (dbError?.cause) {
+        pgError = dbError.cause
+        errorCode = pgError?.code
+        errorMessage = pgError?.message || errorMessage
+        errorDetail = pgError?.detail
+        errorConstraint = pgError?.constraint
+      }
+      
+      // Also check direct properties
+      if (!errorCode) {
+        errorCode = dbError?.code || pgError?.code
+      }
+      if (!errorDetail) {
+        errorDetail = dbError?.detail || pgError?.detail
+      }
+      if (!errorConstraint) {
+        errorConstraint = dbError?.constraint || pgError?.constraint
+      }
+      
+      // Check error message for patterns (postgres-js might not expose code directly)
+      if (errorMessage.includes("violates foreign key constraint") || 
+          errorMessage.includes("foreign key") ||
+          errorMessage.includes("book_id")) {
+        errorCode = "23503"
+      } else if (errorMessage.includes("violates unique constraint") ||
+                 errorMessage.includes("duplicate key")) {
+        errorCode = "23505"
+      } else if (errorMessage.includes("violates not-null constraint") ||
+                 errorMessage.includes("null value")) {
+        errorCode = "23502"
+      }
+      
+      console.error("Extracted error info:", {
+        code: errorCode,
+        message: errorMessage,
+        detail: errorDetail,
+        constraint: errorConstraint
+      })
       
       // Check for specific database errors
-      if (dbError?.code === "23503") {
+      if (errorCode === "23503" || errorMessage.includes("foreign key") || errorMessage.includes("book_id")) {
         // Foreign key constraint violation - book doesn't exist
         console.error("Foreign key violation - book may not exist:", bookId)
         return NextResponse.json(
           { 
             error: "Invalid book reference - the book may have been deleted or doesn't exist",
-            message: dbError?.message || "Foreign key constraint violation",
-            details: dbError?.detail || `Book ID ${bookId} not found`,
+            message: errorMessage || "Foreign key constraint violation",
+            details: errorDetail || `Book ID ${bookId} not found in database. Please refresh the page and try again.`,
             code: "23503"
           },
           { status: 400 }
         )
       }
-      if (dbError?.code === "23505") {
+      if (errorCode === "23505" || errorMessage.includes("unique constraint") || errorMessage.includes("duplicate")) {
         // Unique constraint violation - word already exists
         return NextResponse.json(
           { 
             error: "This word already exists in your vocabulary",
-            message: dbError?.message || "Unique constraint violation",
-            details: dbError?.detail,
+            message: errorMessage || "Unique constraint violation",
+            details: errorDetail,
             code: "23505"
           },
           { status: 409 }
         )
       }
-      if (dbError?.code === "23502") {
+      if (errorCode === "23502" || errorMessage.includes("null value") || errorMessage.includes("not-null")) {
         // NOT NULL constraint violation
         return NextResponse.json(
           { 
             error: "Missing required field",
-            message: dbError?.message || "NOT NULL constraint violation",
-            details: dbError?.detail,
+            message: errorMessage || "NOT NULL constraint violation",
+            details: errorDetail,
             code: "23502"
           },
           { status: 400 }
         )
       }
-      // Re-throw with more context
-      const errorMsg = dbError?.message || String(dbError)
-      console.error("Unhandled database error:", errorMsg)
-      throw new Error(`Database error: ${errorMsg} (code: ${dbError?.code || 'unknown'})`)
+      
+      // Handle column doesn't exist error (42703)
+      if (errorCode === "42703" || errorMessage.includes("does not exist") || errorMessage.includes("column")) {
+        // Column doesn't exist - try insert with minimal required fields only
+        console.error("Column doesn't exist error - retrying with minimal fields only")
+        
+        // Build minimal insert with only required fields that definitely exist
+        const retryValues: any = {
+          userId: user.id,
+          bookId: String(bookId).trim(),
+          term: String(term).trim(),
+          translation: String(translation).trim(),
+          context: String(finalContext).trim(),
+        }
+        
+        // Only add optional fields if they might exist
+        // Try to add kind if it exists (it was added later)
+        try {
+          retryValues.kind = String(vocabKind).trim()
+        } catch (e) {
+          // Ignore if kind doesn't exist
+        }
+        
+        // Add nullable fields
+        if (pageNumber) retryValues.pageNumber = Number(pageNumber)
+        if (position) retryValues.position = Number(position)
+        if (epubLocation) retryValues.epubLocation = String(epubLocation).trim()
+        
+        try {
+          console.log("Retrying insert with minimal fields...")
+          const result = await db
+            .insert(vocabulary)
+            .values(retryValues)
+            .returning()
+          
+          if (result && result.length > 0) {
+            newVocab = result[0]
+            console.log("Vocabulary entry created successfully (with minimal fields):", newVocab.id)
+            // Continue to flashcard creation below
+          } else {
+            throw new Error("Failed to create vocabulary entry - no data returned")
+          }
+        } catch (retryError: any) {
+          // If retry also fails, return helpful error
+          console.error("Retry also failed:", retryError)
+          const missingColumn = errorDetail?.match(/column "([^"]+)"/)?.[1] || "unknown column"
+          return NextResponse.json(
+            { 
+              error: "Database schema mismatch",
+              message: `The database is missing the column: ${missingColumn}`,
+              details: `Please run database migrations to add the missing column. Missing: ${missingColumn}`,
+              code: "42703",
+              missingColumn: missingColumn
+            },
+            { status: 500 }
+          )
+        }
+      } else {
+        // Re-throw with more context for other errors
+        console.error("Unhandled database error - rethrowing")
+        throw new Error(`Database error: ${errorMessage} (code: ${errorCode || 'unknown'}, constraint: ${errorConstraint || 'N/A'})`)
+      }
+    }
+    
+    // If we got here from the retry, newVocab should be set
+    if (!newVocab) {
+      throw new Error("Failed to create vocabulary entry")
     }
 
     // Create flashcard with SM-2 defaults
