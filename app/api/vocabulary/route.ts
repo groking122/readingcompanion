@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { db } from "@/db"
-import { vocabulary, flashcards } from "@/db/schema"
+import { vocabulary, flashcards, books } from "@/db/schema"
 import { eq, and, desc } from "drizzle-orm"
 import { createNewCard } from "@/lib/sm2"
 
@@ -59,14 +59,41 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    console.log("POST /api/vocabulary - Request body:", JSON.stringify(body, null, 2))
+    
     const { term, translation, context, bookId, pageNumber, position, epubLocation, kind } = body
 
     // Validate required fields
     if (!term || !translation || !bookId) {
+      console.error("Missing required fields:", { term: !!term, translation: !!translation, bookId: !!bookId })
       return NextResponse.json(
         { error: "Missing required fields: term, translation, or bookId" },
         { status: 400 }
       )
+    }
+
+    // Validate bookId format (should be UUID) - but don't fail if it's not, just log
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(bookId)) {
+      console.warn("BookId doesn't match UUID format, but continuing:", bookId)
+      // Don't fail - some IDs might be in different format
+    }
+
+    // Verify book exists and belongs to user (optional check - don't fail if it errors)
+    try {
+      const existingBook = await db
+        .select()
+        .from(books)
+        .where(and(eq(books.id, bookId), eq(books.userId, user.id)))
+        .limit(1)
+      
+      if (existingBook.length === 0) {
+        console.warn("Book not found or doesn't belong to user, but continuing:", { bookId, userId: user.id })
+        // Don't fail - let database foreign key constraint handle it
+      }
+    } catch (bookCheckError) {
+      console.warn("Error checking book existence, continuing anyway:", bookCheckError)
+      // Don't fail - let database handle foreign key constraint
     }
 
     // Use term as context fallback if context is missing
@@ -79,10 +106,18 @@ export async function POST(request: NextRequest) {
     const wordCount = termNormalized.split(/\s+/).filter((w: string) => w.length > 0).length
     const vocabKind = kind || (wordCount >= 2 && wordCount <= 6 ? "phrase" : "word")
 
+    console.log("Creating vocabulary entry:", {
+      userId: user.id,
+      bookId,
+      term: term.trim(),
+      translation: translation.trim(),
+      kind: vocabKind
+    })
+
     // Create vocabulary entry
-    const [newVocab] = await db
-      .insert(vocabulary)
-      .values({
+    let newVocab
+    try {
+      const insertValues = {
         userId: user.id,
         bookId,
         term: term.trim(),
@@ -93,32 +128,96 @@ export async function POST(request: NextRequest) {
         pageNumber: pageNumber || null,
         position: position || null,
         epubLocation: epubLocation || null,
-      })
-      .returning()
+      }
+      
+      console.log("Inserting vocabulary with values:", JSON.stringify(insertValues, null, 2))
+      
+      const result = await db
+        .insert(vocabulary)
+        .values(insertValues)
+        .returning()
+      
+      if (!result || result.length === 0) {
+        throw new Error("Failed to create vocabulary entry - no data returned from database")
+      }
+      
+      newVocab = result[0]
+      console.log("Vocabulary entry created successfully:", newVocab.id)
+    } catch (dbError: any) {
+      console.error("Database error creating vocabulary:", dbError)
+      console.error("Error code:", dbError?.code)
+      console.error("Error constraint:", dbError?.constraint)
+      console.error("Error detail:", dbError?.detail)
+      console.error("Error message:", dbError?.message)
+      
+      // Check for specific database errors
+      if (dbError?.code === "23503") {
+        return NextResponse.json(
+          { 
+            error: "Invalid book reference - book may not exist",
+            message: dbError?.message || "Foreign key constraint violation",
+            details: dbError?.detail
+          },
+          { status: 400 }
+        )
+      }
+      if (dbError?.code === "23505") {
+        return NextResponse.json(
+          { 
+            error: "This word already exists in your vocabulary",
+            message: dbError?.message || "Unique constraint violation",
+            details: dbError?.detail
+          },
+          { status: 409 }
+        )
+      }
+      // Re-throw with more context
+      throw new Error(`Database error: ${dbError?.message || String(dbError)} (code: ${dbError?.code || 'unknown'})`)
+    }
 
     // Create flashcard with SM-2 defaults
-    const sm2Card = createNewCard()
-    await db.insert(flashcards).values({
-      vocabularyId: newVocab.id,
-      userId: user.id,
-      easeFactor: sm2Card.easeFactor,
-      interval: sm2Card.interval,
-      repetitions: sm2Card.repetitions,
-      dueAt: sm2Card.dueAt,
-    })
+    try {
+      const sm2Card = createNewCard()
+      await db.insert(flashcards).values({
+        vocabularyId: newVocab.id,
+        userId: user.id,
+        easeFactor: sm2Card.easeFactor,
+        interval: sm2Card.interval,
+        repetitions: sm2Card.repetitions,
+        dueAt: sm2Card.dueAt,
+      })
+      console.log("Flashcard created for vocabulary:", newVocab.id)
+    } catch (flashcardError: any) {
+      console.error("Error creating flashcard:", flashcardError)
+      // Don't fail the whole request if flashcard creation fails
+      // The vocabulary is already saved
+    }
 
     // Return the created vocabulary (already includes id)
     return NextResponse.json(newVocab)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error saving vocabulary:", error)
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     const errorDetails = error instanceof Error ? error.stack : String(error)
-    console.error("Error details:", errorDetails)
+    const errorCode = error?.code || "UNKNOWN"
+    const errorConstraint = error?.constraint || "N/A"
+    
+    console.error("Error details:", {
+      message: errorMessage,
+      code: errorCode,
+      constraint: errorConstraint,
+      stack: errorDetails,
+      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+    })
+    
+    // Return more detailed error - always include message for debugging
     return NextResponse.json(
       { 
         error: "Failed to save vocabulary",
         message: errorMessage,
-        details: process.env.NODE_ENV === "development" ? errorDetails : undefined
+        code: errorCode,
+        constraint: errorConstraint,
+        details: errorDetails
       },
       { status: 500 }
     )

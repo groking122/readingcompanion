@@ -785,26 +785,57 @@ export default function ReaderPage() {
         })
       } else {
         // Get actual error message from API
-        let errorData
+        let errorData: any = {}
         try {
           errorData = await response.json()
         } catch (e) {
           errorData = { error: `HTTP ${response.status}: ${response.statusText}` }
         }
-        const errorMessage = errorData.error || errorData.message || `Failed to save word (${response.status})`
+        
         console.error("Save error response:", {
           status: response.status,
           statusText: response.statusText,
-          errorData
+          errorData: JSON.stringify(errorData, null, 2)
         })
+        
+        // Build user-friendly error message
+        let errorMessage = errorData.error || errorData.message || `Failed to save word (${response.status})`
+        
+        // Add details if available
+        if (errorData.details) {
+          errorMessage += `: ${errorData.details}`
+        } else if (errorData.message && errorData.message !== errorMessage) {
+          errorMessage += `: ${errorData.message}`
+        }
+        
+        // Add constraint info if available
+        if (errorData.constraint) {
+          errorMessage += ` (constraint: ${errorData.constraint})`
+        }
+        
+        // Add code if available
+        if (errorData.code) {
+          errorMessage += ` (code: ${errorData.code})`
+        }
+        
+        console.error("Final error message:", errorMessage)
         throw new Error(errorMessage)
       }
     } catch (error) {
       console.error("Error saving word:", error)
-      const errorMessage = error instanceof Error ? error.message : "An error occurred while saving. Please try again."
+      let errorMessage = "An error occurred while saving. Please try again."
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+        // If it's a detailed error from API, show the details
+        if (error.message.includes(":")) {
+          errorMessage = error.message
+        }
+      }
+      
       toast.error("Failed to save", errorMessage)
       // Don't reset saving state immediately - let user see the error
-      setTimeout(() => setSaving(false), 1000)
+      setTimeout(() => setSaving(false), 2000)
       return
     } finally {
       setSaving(false)
