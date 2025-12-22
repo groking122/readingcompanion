@@ -42,9 +42,9 @@
   --duration-slow: 300ms;
   --duration-slower: 500ms;
   
-  /* Theme transition variables */
-  --theme-dur: 200ms;
-  --theme-ease: cubic-bezier(0.2, 0, 0, 1);
+  /* Theme transition variables - optimized for speed and smoothness */
+  --theme-dur: 150ms;
+  --theme-ease: cubic-bezier(0.4, 0, 0.2, 1);
     
     /* Z-Index Scale */
     --z-dropdown: 1000;
@@ -305,6 +305,7 @@ html, body {
   transition:
     background-color var(--theme-dur) var(--theme-ease),
     color var(--theme-dur) var(--theme-ease);
+  will-change: background-color, color;
 }
 
 /* Apply theme transitions to major "surfaces" only */
@@ -316,6 +317,8 @@ html, body {
     box-shadow var(--theme-dur) var(--theme-ease),
     fill var(--theme-dur) var(--theme-ease),
     stroke var(--theme-dur) var(--theme-ease);
+  /* Optimize for smooth transitions */
+  will-change: background-color, color, border-color;
 }
 
 /* Exclude certain elements from transitions for better performance */
@@ -323,13 +326,16 @@ svg, img, canvas, video, iframe, [data-no-transition] {
   transition: none !important;
 }
 
-/* Smooth theme button transition */
+/* Smooth theme button transition - optimized for speed */
 button[aria-label*="theme"], 
 button[aria-label*="Toggle theme"],
 button[title*="theme"],
 button[title*="Toggle theme"] {
-  transition: background-color 0.2s ease-out, transform 0.15s ease-out, color 0.2s ease-out, opacity 0.2s ease-out;
-  will-change: background-color, transform, color;
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 150ms cubic-bezier(0.4, 0, 0.2, 1), 
+              color 150ms cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: background-color, transform, color, opacity;
 }
 
 /* Optimize card transitions */

@@ -105,14 +105,14 @@ export function Nav() {
               variant="ghost"
               size="sm"
               onClick={toggleDarkMode}
-              className="h-9 w-9 p-0 rounded-lg hover:bg-accent/50 transition-all duration-200 relative overflow-hidden"
+              className="h-9 w-9 p-0 rounded-lg hover:bg-accent/50 transition-[background-color,transform] duration-150 ease-out relative overflow-hidden"
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
               aria-label="Toggle theme"
             >
-              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-200" style={{ opacity: isDarkMode ? 0 : 1 }}>
+              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 ease-out" style={{ opacity: isDarkMode ? 0 : 1 }}>
                 <Moon className="h-4 w-4" />
               </span>
-              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-200" style={{ opacity: isDarkMode ? 1 : 0 }}>
+              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 ease-out" style={{ opacity: isDarkMode ? 1 : 0 }}>
                 <Sun className="h-4 w-4" />
               </span>
               <span className="sr-only">Toggle theme</span>
