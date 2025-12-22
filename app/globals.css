@@ -287,19 +287,51 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Smooth transitions for theme changes - more refined */
+/* Smooth transitions for theme changes - optimized for performance */
 * {
-  transition: background-color var(--duration-slow) cubic-bezier(0.4, 0, 0.2, 1), 
-              color var(--duration-slow) cubic-bezier(0.4, 0, 0.2, 1), 
-              border-color var(--duration-slow) cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow var(--duration-normal) cubic-bezier(0.4, 0, 0.2, 1),
-              transform var(--duration-normal) cubic-bezier(0.4, 0, 0.2, 1),
-              opacity var(--duration-normal) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              color 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Exclude certain elements from transitions */
-svg, img, canvas, video {
-  transition: none;
+/* Exclude certain elements from transitions for better performance */
+svg, img, canvas, video, iframe, [data-no-transition] {
+  transition: none !important;
+}
+
+/* Optimize theme transitions - smoother color changes */
+html {
+  transition: background-color 0.25s ease-out, color 0.25s ease-out;
+  will-change: background-color, color;
+}
+
+html.dark {
+  transition: background-color 0.25s ease-out, color 0.25s ease-out;
+}
+
+/* Smooth theme button transition */
+button[aria-label*="theme"], 
+button[aria-label*="Toggle theme"],
+button[title*="theme"],
+button[title*="Toggle theme"] {
+  transition: background-color 0.2s ease-out, transform 0.15s ease-out, color 0.2s ease-out, opacity 0.2s ease-out;
+  will-change: background-color, transform, color;
+}
+
+/* Optimize card transitions */
+.card, [class*="Card"] {
+  will-change: transform, box-shadow;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* Sophisticated Micro-Interactions */

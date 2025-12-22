@@ -61,12 +61,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { term, translation, context, bookId, pageNumber, position, epubLocation, kind } = body
 
-    if (!term || !translation || !context || !bookId) {
+    // Validate required fields
+    if (!term || !translation || !bookId) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields: term, translation, or bookId" },
         { status: 400 }
       )
     }
+
+    // Use term as context fallback if context is missing
+    const finalContext = (context && context.trim().length > 0) ? context.trim() : term.trim()
 
     // Normalize term for caching (lowercase, trim, collapse whitespace)
     const termNormalized = term.trim().toLowerCase().replace(/\s+/g, " ")
@@ -81,10 +85,10 @@ export async function POST(request: NextRequest) {
       .values({
         userId: user.id,
         bookId,
-        term,
+        term: term.trim(),
         termNormalized,
-        translation,
-        context,
+        translation: translation.trim(),
+        context: finalContext,
         kind: vocabKind,
         pageNumber: pageNumber || null,
         position: position || null,

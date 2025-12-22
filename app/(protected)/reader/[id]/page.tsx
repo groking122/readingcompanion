@@ -680,26 +680,37 @@ export default function ReaderPage() {
   }
 
   const handleSaveWord = async () => {
-    if (!selectedText || !translation || !book) return
+    if (!selectedText || !translation || !book) {
+      toast.error("Missing information", "Please select a word and wait for translation.")
+      return
+    }
 
     setSaving(true)
     try {
-      // Use the context we already captured, or try to get it again
-      let context = selectedContext || selectedText
+      // Ensure we always have a context - use selectedText as fallback
+      let context = selectedContext?.trim() || selectedText.trim()
       
       // For non-EPUB, try to get better context if we don't have it
-      if (book.type !== "epub" && !selectedContext) {
+      if (book.type !== "epub" && (!selectedContext || selectedContext === selectedText)) {
         const selection = window.getSelection()
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0)
           const container = range.commonAncestorContainer
           if (container.parentElement) {
-            context = container.parentElement.textContent?.substring(
-              Math.max(0, range.startOffset - 100),
-              Math.min(container.parentElement.textContent.length, range.endOffset + 100)
-            ) || selectedText
+            const parentText = container.parentElement.textContent || ""
+            const startOffset = Math.max(0, range.startOffset - 100)
+            const endOffset = Math.min(parentText.length, range.endOffset + 100)
+            const extractedContext = parentText.substring(startOffset, endOffset).trim()
+            if (extractedContext && extractedContext.length > selectedText.length) {
+              context = extractedContext
+            }
           }
         }
+      }
+
+      // Ensure context is not empty - fallback to selectedText
+      if (!context || context.trim().length === 0) {
+        context = selectedText.trim()
       }
 
       // For EPUB, store location and page; for others, calculate position
@@ -728,9 +739,9 @@ export default function ReaderPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          term: selectedText,
-          translation,
-          context,
+          term: selectedText.trim(),
+          translation: translation.trim(),
+          context: context.trim(),
           bookId: book.id,
           position,
           epubLocation,
@@ -749,22 +760,30 @@ export default function ReaderPage() {
           `${selectedText} has been added to your vocabulary.`
         )
         
-        // Show saved feedback - keep popover open briefly to show success
-        // Auto-close after 2 seconds
-        setTimeout(() => {
+        // Close popover immediately for better UX and performance
+        requestAnimationFrame(() => {
           setPopoverOpen(false)
           setSelectedText("")
           setTranslation("")
           setAlternativeTranslations([])
           setSelectedContext("")
           setSavedWordId(null)
-        }, 2000)
+          setPopoverPosition(undefined)
+          
+          // Clear selection to prevent re-triggering
+          window.getSelection()?.removeAllRanges()
+        })
       } else {
-        throw new Error("Failed to save word")
+        // Get actual error message from API
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
+        const errorMessage = errorData.error || errorData.message || "Failed to save word"
+        console.error("Save error:", errorData)
+        throw new Error(errorMessage)
       }
     } catch (error) {
       console.error("Error saving word:", error)
-      toast.error("Failed to save", "An error occurred while saving. Please try again.")
+      const errorMessage = error instanceof Error ? error.message : "An error occurred while saving. Please try again."
+      toast.error("Failed to save", errorMessage)
     } finally {
       setSaving(false)
     }

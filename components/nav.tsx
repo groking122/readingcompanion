@@ -35,11 +35,15 @@ export function Nav() {
     const newDarkMode = !isDarkMode
     setIsDarkMode(newDarkMode)
     localStorage.setItem("darkMode", newDarkMode.toString())
-    if (newDarkMode) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
+    
+    // Smooth transition with requestAnimationFrame for better performance
+    requestAnimationFrame(() => {
+      if (newDarkMode) {
+        document.documentElement.classList.add("dark")
+      } else {
+        document.documentElement.classList.remove("dark")
+      }
+    })
   }
 
   // Close mobile menu when route changes
@@ -102,14 +106,16 @@ export function Nav() {
               variant="ghost"
               size="sm"
               onClick={toggleDarkMode}
-              className="h-9 w-9 p-0 rounded-lg hover:bg-accent/50 transition-all duration-200"
+              className="h-9 w-9 p-0 rounded-lg hover:bg-accent/50 transition-all duration-200 relative overflow-hidden"
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label="Toggle theme"
             >
-              {isDarkMode ? (
-                <Sun className="h-4 w-4" />
-              ) : (
+              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-200" style={{ opacity: isDarkMode ? 0 : 1 }}>
                 <Moon className="h-4 w-4" />
-              )}
+              </span>
+              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-200" style={{ opacity: isDarkMode ? 1 : 0 }}>
+                <Sun className="h-4 w-4" />
+              </span>
               <span className="sr-only">Toggle theme</span>
             </Button>
             <UserButton />
