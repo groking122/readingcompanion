@@ -65,6 +65,8 @@ export function EpubReader({
           "font-family": `"${fontFamily}", serif !important`,
           "font-size": `${fontSize}px !important`,
           "line-height": `${lineHeight} !important`,
+          "background-color": "transparent !important", // Let parent theme control background
+          "color": "inherit !important", // Inherit text color from parent
         },
         "*": {
           "font-family": `"${fontFamily}", serif !important`,
@@ -98,6 +100,12 @@ export function EpubReader({
           const style = doc.createElement("style")
           style.id = styleId
           style.textContent = `
+            /* Inherit theme colors from parent */
+            body {
+              background-color: inherit !important;
+              color: inherit !important;
+            }
+            
             .epub-word {
               cursor: pointer;
               transition: background-color 0.2s ease;

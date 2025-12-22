@@ -349,9 +349,26 @@ export default function ReaderPage() {
   useEffect(() => {
     if (book?.id) {
       fetch(`/api/bookmarks?bookId=${book.id}`)
-        .then(res => res.json())
-        .then(data => setBookmarks(data))
-        .catch(err => console.error("Error fetching bookmarks:", err))
+        .then(res => {
+          if (!res.ok) {
+            console.error("Bookmarks fetch failed:", res.status, res.statusText)
+            return []
+          }
+          return res.json()
+        })
+        .then(data => {
+          // Ensure data is an array
+          if (Array.isArray(data)) {
+            setBookmarks(data)
+          } else {
+            console.error("Bookmarks data is not an array:", data)
+            setBookmarks([])
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching bookmarks:", err)
+          setBookmarks([])
+        })
     }
   }, [book?.id])
 
@@ -928,7 +945,7 @@ export default function ReaderPage() {
     return <div className="text-center py-12">Book not found</div>
   }
 
-  // Theme background colors
+  // Theme background colors - apply to both container and content
   const themeStyles = {
     light: "bg-white",
     sepia: "bg-[#f4ecd8]",
@@ -937,9 +954,10 @@ export default function ReaderPage() {
   }
 
   const themeClass = themeStyles[theme]
+  const textColorClass = theme === "dark" ? "text-[#e0e0e0]" : "text-foreground"
 
   return (
-    <div className={`min-h-screen ${distractionFree ? themeClass : "bg-background"}`}>
+    <div className={`min-h-screen transition-colors duration-200 ${distractionFree ? themeClass : "bg-background"}`}>
       {!distractionFree && (
         <div className={`mb-6 container mx-auto px-4 transition-all duration-300 ${headerMinimized ? 'mb-2' : ''}`}>
           {/* Collapsible Header */}
@@ -1100,7 +1118,7 @@ export default function ReaderPage() {
 
       <div className={`${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"}`}>
         <div
-          className={`${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} overflow-auto ${distractionFree ? "" : "shadow-sm"}`}
+          className={`${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} ${textColorClass} overflow-auto transition-colors duration-200 ${distractionFree ? "" : "shadow-sm"}`}
           onMouseUp={() => {
             // Only handle mouseup for non-EPUB content
             // EPUB content handles selection via iframe events
@@ -1108,11 +1126,14 @@ export default function ReaderPage() {
               handleTextSelection("")
             }
           }}
-          style={book.type === "epub" ? {
-            "--RS__fontFamily": fontFamily,
-            "--RS__fontSize": `${fontSize}px`,
-            "--RS__lineHeight": lineHeight.toString(),
-          } as React.CSSProperties : undefined}
+          style={{
+            "--RS__fontFamily": book.type === "epub" ? fontFamily : undefined,
+            "--RS__fontSize": book.type === "epub" ? `${fontSize}px` : undefined,
+            "--RS__lineHeight": book.type === "epub" ? lineHeight.toString() : undefined,
+            backgroundColor: theme === "dark" ? "#1a1a1a" : theme === "sepia" ? "#f4ecd8" : theme === "paper" ? "#faf8f3" : "white",
+            color: theme === "dark" ? "#e0e0e0" : "inherit",
+            transition: "background-color 0.2s ease, color 0.2s ease",
+          } as React.CSSProperties}
         >
         {book.type === "epub" ? (
           epubError ? (
@@ -1283,8 +1304,21 @@ export default function ReaderPage() {
                   
                   // Calculate initial page and progress
                   try {
+                    if (!rend) {
+                      console.warn("Rendition is not available")
+                      return
+                    }
+                    
                     const bookObj = book || rend.book
-                    const currentLoc = rend.currentLocation()
+                    if (!bookObj) {
+                      console.warn("Book object is not available")
+                      return
+                    }
+                    
+                    // Wait a bit for rendition to be fully ready
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                    
+                    const currentLoc = rend.currentLocation?.()
                     if (currentLoc && currentLoc.start && bookObj?.locations) {
                       const percentage = bookObj.locations.percentageFromCfi(currentLoc.start.cfi) || 0
                       setReadingProgress(percentage)
@@ -1292,9 +1326,15 @@ export default function ReaderPage() {
                         const page = Math.ceil((percentage / 100) * bookObj.locations.total)
                         setCurrentPage(page)
                       }
+                      
+                      // Set current location
+                      if (currentLoc.start.cfi) {
+                        setCurrentLocation(currentLoc.start.cfi)
+                      }
                     }
                   } catch (e) {
                     console.error("Error getting initial page:", e)
+                    // Don't throw - this is not critical
                   }
                 }}
                 onTocChanged={(tocItems) => {

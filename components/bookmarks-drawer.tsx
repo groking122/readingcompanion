@@ -68,7 +68,7 @@ export function BookmarksDrawer({
         
         <ScrollArea className="h-[calc(100vh-4rem)]">
           <div className="p-4">
-            {bookmarks.length === 0 ? (
+            {!Array.isArray(bookmarks) || bookmarks.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 <Bookmark className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p className="text-sm">No bookmarks yet</p>

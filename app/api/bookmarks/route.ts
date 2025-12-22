@@ -16,9 +16,15 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const bookId = searchParams.get("bookId")
 
-    let conditions = eq(bookmarks.userId, user.id)
+    // Build conditions properly
+    let conditions
     if (bookId) {
-      conditions = and(conditions, eq(bookmarks.bookId, bookId)) as any
+      conditions = and(
+        eq(bookmarks.userId, user.id),
+        eq(bookmarks.bookId, bookId)
+      )
+    } else {
+      conditions = eq(bookmarks.userId, user.id)
     }
 
     const result = await db
@@ -28,10 +34,17 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(bookmarks.createdAt))
 
     return NextResponse.json(result)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching bookmarks:", error)
+    const errorMessage = error?.message || "Unknown error"
+    const errorCode = error?.code || "UNKNOWN"
+    console.error("Bookmark fetch error details:", { errorMessage, errorCode, error })
     return NextResponse.json(
-      { error: "Failed to fetch bookmarks" },
+      { 
+        error: "Failed to fetch bookmarks",
+        message: errorMessage,
+        code: errorCode
+      },
       { status: 500 }
     )
   }
