@@ -52,7 +52,7 @@ export function Nav() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-soft">
+      <nav className="theme-surface sticky top-0 z-50 w-full border-b border-border/40 bg-background shadow-soft">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
           <div className="flex items-center gap-4 md:gap-8">
             {/* Mobile Menu Button */}

@@ -224,7 +224,7 @@ export default function SuggestedBooksPage() {
               return (
                 <Card
                   key={`${book.title}-${index}`}
-                  className="group hover:shadow-elevated transition-all duration-300 border-l-4 interactive-scale hover-lift-smooth"
+                  className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth"
                   style={{
                     borderLeftColor: getCategoryColor(book.category),
                     animationDelay: `${index * 30}ms`,

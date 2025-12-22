@@ -73,7 +73,7 @@ export function TranslationDrawer({
       {/* Drawer - Bottom sheet for mobile only */}
       <div
         className={cn(
-          "fixed bg-background shadow-xl transition-transform duration-300 ease-in-out",
+          "theme-surface fixed bg-background shadow-xl transition-transform duration-300 ease-in-out",
           // Mobile: bottom drawer (only visible on mobile)
           "bottom-0 left-0 right-0 max-h-[85vh] rounded-t-lg border-t",
           // Transform states

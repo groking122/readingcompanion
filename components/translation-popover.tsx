@@ -132,7 +132,7 @@ export function TranslationPopover({
       <div
         ref={popoverRef}
         className={cn(
-          "fixed bg-background shadow-2xl rounded-lg border z-[101] transition-opacity duration-200",
+          "theme-surface fixed bg-background shadow-2xl rounded-lg border z-[101] transition-opacity duration-200",
           "w-80 max-h-[70vh] flex flex-col"
         )}
         style={{

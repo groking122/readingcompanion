@@ -362,7 +362,7 @@ export default function WishlistPage() {
           {filteredItems.map((item, index) => (
             <Card
               key={item.id}
-              className="group hover:shadow-elevated transition-all duration-300 border-l-4 interactive-scale hover-lift-smooth"
+              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth"
               style={{
                 borderLeftColor:
                   item.priority > 0

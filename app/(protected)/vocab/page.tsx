@@ -425,7 +425,7 @@ export default function VocabPage() {
             return (
               <Card 
                 key={item.id} 
-                className="group hover:shadow-elevated transition-all duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth"
+                className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth"
                 style={{ animationDelay: `${index * 30}ms` }}
               >
                 <CardHeader className="pb-3">
