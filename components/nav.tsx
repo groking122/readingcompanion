@@ -36,14 +36,13 @@ export function Nav() {
     setIsDarkMode(newDarkMode)
     localStorage.setItem("darkMode", newDarkMode.toString())
     
-    // Smooth transition with requestAnimationFrame for better performance
-    requestAnimationFrame(() => {
-      if (newDarkMode) {
-        document.documentElement.classList.add("dark")
-      } else {
-        document.documentElement.classList.remove("dark")
-      }
-    })
+    // Apply theme change immediately and synchronously
+    // Remove requestAnimationFrame to ensure all elements change at the same time
+    if (newDarkMode) {
+      document.documentElement.classList.add("dark")
+    } else {
+      document.documentElement.classList.remove("dark")
+    }
   }
 
   // Close mobile menu when route changes

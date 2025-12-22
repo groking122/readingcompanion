@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Loader2, Settings2, X, Menu, BookOpen, Keyboard, Bookmark, BookmarkCheck } from "lucide-react"
+import { Loader2, Settings2, X, Menu, BookOpen, Keyboard, Bookmark, BookmarkCheck, ChevronDown } from "lucide-react"
 import { ReaderSettings } from "@/components/reader-settings"
 import { EpubReader } from "@/components/epub-reader"
 import { TocDrawer, type TocItem } from "@/components/toc-drawer"
@@ -175,6 +175,7 @@ export default function ReaderPage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
+  const [headerMinimized, setHeaderMinimized] = useState(false)
   const router = useRouter()
 
   // Detect mobile screen size
@@ -940,29 +941,83 @@ export default function ReaderPage() {
   return (
     <div className={`min-h-screen ${distractionFree ? themeClass : "bg-background"}`}>
       {!distractionFree && (
-        <div className="mb-6 container mx-auto px-4">
-          <div className="flex items-center justify-between mb-4 gap-2">
-            <h1 className="text-2xl font-bold flex-1 truncate">{book.title}</h1>
-            <div className="flex items-center gap-2">
-              {/* Bookmarks Button */}
+        <div className={`mb-6 container mx-auto px-4 transition-all duration-300 ${headerMinimized ? 'mb-2' : ''}`}>
+          {/* Collapsible Header */}
+          <div className={`flex items-center justify-between gap-2 transition-all duration-300 ${
+            headerMinimized ? 'mb-0' : 'mb-4'
+          }`}>
+            {/* Title - hidden when minimized */}
+            <h1 className={`text-2xl font-bold flex-1 truncate transition-all duration-300 ${
+              headerMinimized ? 'opacity-0 max-w-0 overflow-hidden' : 'opacity-100 max-w-full'
+            }`}>
+              {book.title}
+            </h1>
+            
+            {/* Grouped Action Buttons */}
+            <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-1.5 shadow-sm">
+              {/* Minimize/Expand Toggle */}
               <Button
-                variant="outline"
-                size="lg"
-                onClick={() => setBookmarksOpen(true)}
-                className="h-12 min-w-[48px]"
-                aria-label="Bookmarks"
+                variant="ghost"
+                size="sm"
+                onClick={() => setHeaderMinimized(!headerMinimized)}
+                className="h-8 w-8 p-0"
+                aria-label={headerMinimized ? "Expand header" : "Minimize header"}
+                title={headerMinimized ? "Show title and settings" : "Hide title"}
               >
-                <Bookmark className="h-5 w-5" />
+                {headerMinimized ? (
+                  <ChevronDown className="h-4 w-4 rotate-180" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
+              
+              {/* Settings Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="h-8 w-8 p-0"
+                aria-label="Settings"
+                title="Reader settings"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+              
+              {/* Table of Contents (EPUB only) */}
+              {book.type === "epub" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTocOpen(true)}
+                  className="h-8 w-8 p-0"
+                  aria-label="Table of contents"
+                  title="Table of contents"
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
+              )}
+              
+              {/* Bookmarks List Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBookmarksOpen(true)}
+                className="h-8 w-8 p-0 relative"
+                aria-label="Bookmarks"
+                title="View bookmarks"
+              >
+                <Bookmark className="h-4 w-4" />
                 {bookmarks.length > 0 && (
-                  <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[18px]">
+                  <span className="absolute -top-1 -right-1 text-[10px] bg-primary text-primary-foreground rounded-full px-1 min-w-[16px] h-4 flex items-center justify-center">
                     {bookmarks.length}
                   </span>
                 )}
               </Button>
+              
               {/* Add Bookmark Button */}
               <Button
-                variant="outline"
-                size="lg"
+                variant="ghost"
+                size="sm"
                 onClick={async () => {
                   try {
                     const bookmarkData: any = { bookId: book.id }
@@ -978,56 +1033,54 @@ export default function ReaderPage() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(bookmarkData),
                     })
+                    
                     if (res.ok) {
                       const newBookmark = await res.json()
                       setBookmarks([...bookmarks, newBookmark])
                       toast.success("Bookmark added!", "You can return to this location anytime.")
                     } else {
-                      toast.error("Failed to add bookmark", "Please try again.")
+                      const errorData = await res.json().catch(() => ({}))
+                      const errorMsg = errorData.message || errorData.error || "Please try again."
+                      console.error("Bookmark error:", errorData)
+                      toast.error("Failed to add bookmark", errorMsg)
                     }
                   } catch (error) {
                     console.error("Error creating bookmark:", error)
-                    toast.error("Failed to add bookmark", "An error occurred.")
+                    toast.error("Failed to add bookmark", "An error occurred. Please try again.")
                   }
                 }}
-                className="h-12 min-w-[48px]"
+                className="h-8 w-8 p-0"
                 aria-label="Add bookmark"
                 title="Bookmark current location"
               >
-                <BookmarkCheck className="h-5 w-5" />
+                <BookmarkCheck className="h-4 w-4" />
               </Button>
-              {book.type === "epub" && (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => setTocOpen(true)}
-                  className="h-12 min-w-[48px]"
-                  aria-label="Open table of contents"
-                >
-                  <Menu className="h-5 w-5" />
-                  <span className="hidden sm:inline ml-2">Contents</span>
-                </Button>
-              )}
             </div>
           </div>
-          <ReaderSettings
-            fontSize={fontSize}
-            fontFamily={fontFamily}
-            lineHeight={lineHeight}
-            maxWidth={maxWidth}
-            paragraphSpacing={paragraphSpacing}
-            theme={theme}
-            distractionFree={distractionFree}
-            isOpen={settingsOpen}
-            onOpenChange={setSettingsOpen}
-            onFontSizeChange={setFontSize}
-            onFontFamilyChange={setFontFamily}
-            onLineHeightChange={setLineHeight}
-            onMaxWidthChange={setMaxWidth}
-            onParagraphSpacingChange={setParagraphSpacing}
-            onThemeChange={setTheme}
-            onDistractionFreeChange={setDistractionFree}
-          />
+          
+          {/* Settings Panel - shown when not minimized */}
+          {!headerMinimized && (
+            <div className="transition-all duration-300">
+              <ReaderSettings
+                fontSize={fontSize}
+                fontFamily={fontFamily}
+                lineHeight={lineHeight}
+                maxWidth={maxWidth}
+                paragraphSpacing={paragraphSpacing}
+                theme={theme}
+                distractionFree={distractionFree}
+                isOpen={settingsOpen}
+                onOpenChange={setSettingsOpen}
+                onFontSizeChange={setFontSize}
+                onFontFamilyChange={setFontFamily}
+                onLineHeightChange={setLineHeight}
+                onMaxWidthChange={setMaxWidth}
+                onParagraphSpacingChange={setParagraphSpacing}
+                onThemeChange={setTheme}
+                onDistractionFreeChange={setDistractionFree}
+              />
+            </div>
+          )}
         </div>
       )}
 
