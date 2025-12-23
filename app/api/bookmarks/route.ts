@@ -67,16 +67,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Prepare values - explicitly set all optional fields to null if empty/undefined
+    // This ensures Drizzle inserts NULL instead of empty strings
+    const bookmarkValues = {
+      userId: user.id,
+      bookId,
+      title: (title && typeof title === 'string' && title.trim()) ? title.trim() : null,
+      epubLocation: (epubLocation && typeof epubLocation === 'string' && epubLocation.trim()) ? epubLocation.trim() : null,
+      pageNumber: (pageNumber !== undefined && pageNumber !== null && pageNumber !== '') 
+        ? (isNaN(Number(pageNumber)) ? null : Number(pageNumber))
+        : null,
+      position: (position !== undefined && position !== null && position !== '') 
+        ? (isNaN(Number(position)) ? null : Number(position))
+        : null,
+    }
+
     const [newBookmark] = await db
       .insert(bookmarks)
-      .values({
-        userId: user.id,
-        bookId,
-        title: title || null,
-        epubLocation: epubLocation || null,
-        pageNumber: pageNumber || null,
-        position: position || null,
-      })
+      .values(bookmarkValues)
       .returning()
 
     return NextResponse.json(newBookmark)
