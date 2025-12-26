@@ -15,8 +15,9 @@ import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawe
 import { toast } from "@/lib/toast"
 
 // Helper function to mark unknown words in text
-function markUnknownWords(text: string, knownWords: Set<string>): React.ReactNode[] {
-  if (!text || knownWords.size === 0) {
+function markUnknownWords(text: string, knownWords: Set<string>, hasKnownWords: boolean): React.ReactNode[] {
+  if (!text || !hasKnownWords || knownWords.size === 0) {
+    // Don't mark anything if we don't have known words data yet
     return [text]
   }
 
@@ -29,19 +30,19 @@ function markUnknownWords(text: string, knownWords: Set<string>): React.ReactNod
       return <span key={index}>{part}</span>
     }
     
-    // Check if word is known (normalize: lowercase, trim)
+    // Check if word is known (normalize: lowercase, trim, remove punctuation)
     const normalized = part.trim().toLowerCase().replace(/[^\w]/g, "")
-    const isKnown = normalized.length > 0 && knownWords.has(normalized)
     
-    if (isKnown) {
-      return <span key={index}>{part}</span>
-    } else {
+    // Only mark as unknown if word has letters/numbers and is not in known set
+    if (normalized.length > 0 && !knownWords.has(normalized)) {
       // Mark as unknown word
       return (
         <span key={index} className="unknown-word-text" title="Unknown word">
           {part}
         </span>
       )
+    } else {
+      return <span key={index}>{part}</span>
     }
   })
 }
@@ -408,6 +409,7 @@ export default function ReaderPage() {
   // Fetch known words for this book
   useEffect(() => {
     if (book?.id) {
+      setHasKnownWordsData(false) // Reset flag while fetching
       fetch(`/api/vocabulary?bookId=${book.id}`)
         .then(res => {
           if (!res.ok) {
@@ -418,27 +420,41 @@ export default function ReaderPage() {
         })
         .then(data => {
           if (Array.isArray(data)) {
-            // Create a Set of normalized known words (lowercase, trimmed)
+            // Create a Set of normalized known words (lowercase, trimmed, punctuation removed)
             const knownSet = new Set<string>()
             data.forEach((item: any) => {
-              if (item.isKnown && item.termNormalized) {
-                knownSet.add(item.termNormalized.toLowerCase().trim())
-              }
-              // Also add the term itself if normalized is not available
-              if (item.isKnown && item.term) {
-                const normalized = item.term.toLowerCase().trim().replace(/\s+/g, " ")
-                knownSet.add(normalized)
+              if (item.isKnown) {
+                // Add normalized term if available
+                if (item.termNormalized) {
+                  const normalized = item.termNormalized.toLowerCase().trim().replace(/[^\w]/g, "")
+                  if (normalized.length > 0) {
+                    knownSet.add(normalized)
+                  }
+                }
+                // Also add the term itself (normalized)
+                if (item.term) {
+                  const normalized = item.term.toLowerCase().trim().replace(/[^\w]/g, "")
+                  if (normalized.length > 0) {
+                    knownSet.add(normalized)
+                  }
+                }
               }
             })
             setKnownWords(knownSet)
+            setHasKnownWordsData(true) // Mark that we have data (even if empty)
           } else {
             setKnownWords(new Set())
+            setHasKnownWordsData(true)
           }
         })
         .catch(err => {
           console.error("Error fetching known words:", err)
           setKnownWords(new Set())
+          setHasKnownWordsData(true) // Still mark as loaded to avoid marking all words
         })
+    } else {
+      setHasKnownWordsData(false)
+      setKnownWords(new Set())
     }
   }, [book?.id])
 
@@ -1242,6 +1258,7 @@ export default function ReaderPage() {
                 url={epubUrl}
                 location={location}
                 knownWords={knownWords}
+                hasKnownWordsData={hasKnownWordsData}
                 onLocationChange={(loc) => {
                   // Only update if location actually changed to prevent infinite loops
                   if (loc !== location) {
@@ -1493,7 +1510,7 @@ export default function ReaderPage() {
                       marginBottom: `var(--para-gap)`,
                     }}
                   >
-                    {markUnknownWords(paragraph.trim(), knownWords)}
+                    {markUnknownWords(paragraph.trim(), knownWords, hasKnownWordsData)}
                   </p>
                 ))}
               </article>

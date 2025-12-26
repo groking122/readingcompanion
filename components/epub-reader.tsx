@@ -21,6 +21,7 @@ interface EpubReaderProps {
   fontFamily?: string
   lineHeight?: number
   knownWords?: Set<string> // Set of normalized known words (lowercase, trimmed)
+  hasKnownWordsData?: boolean // Whether known words data has been loaded
 }
 
 export function EpubReader({
@@ -34,6 +35,7 @@ export function EpubReader({
   fontFamily = "Inter",
   lineHeight = 1.6,
   knownWords = new Set(),
+  hasKnownWordsData = false,
 }: EpubReaderProps) {
   const viewerRef = useRef<HTMLDivElement>(null)
   const bookRef = useRef<any>(null)
@@ -86,7 +88,7 @@ export function EpubReader({
 
   // Re-mark unknown words when knownWords changes
   useEffect(() => {
-    if (!viewerRef.current || !rendition) return
+    if (!viewerRef.current || !rendition || !hasKnownWordsData) return
 
     const updateWordMarking = () => {
       try {
@@ -103,9 +105,14 @@ export function EpubReader({
           if (isKnown) {
             span.classList.remove("unknown-word")
             span.removeAttribute("data-unknown")
-          } else if (word.length > 0) {
+          } else if (word.length > 0 && knownWords.size > 0) {
+            // Only mark as unknown if we have known words data and word is not known
             span.classList.add("unknown-word")
             span.setAttribute("data-unknown", "true")
+          } else {
+            // Remove unknown marking if we don't have data yet
+            span.classList.remove("unknown-word")
+            span.removeAttribute("data-unknown")
           }
         })
       } catch (error) {
@@ -116,7 +123,7 @@ export function EpubReader({
     // Small delay to ensure DOM is ready
     const timeout = setTimeout(updateWordMarking, 100)
     return () => clearTimeout(timeout)
-  }, [knownWords, rendition])
+  }, [knownWords, hasKnownWordsData, rendition])
 
   // Set up word-level hover and click handlers for EPUB iframe
   useEffect(() => {
@@ -214,12 +221,18 @@ export function EpubReader({
                 // Wrap word in span
                 const span = doc.createElement("span")
                 const cleanWord = word.trim().replace(/[^\w]/g, "").toLowerCase()
-                const isKnown = cleanWord.length > 0 && knownWords.has(cleanWord)
                 
-                span.className = isKnown ? "epub-word" : "epub-word unknown-word"
+                // Only mark as unknown if we have loaded known words data AND word is not known
+                // If we haven't loaded data yet (hasKnownWordsData is false), don't mark anything
+                const shouldMarkUnknown = hasKnownWordsData && 
+                                         cleanWord.length > 0 && 
+                                         knownWords.size > 0 && 
+                                         !knownWords.has(cleanWord)
+                
+                span.className = shouldMarkUnknown ? "epub-word unknown-word" : "epub-word"
                 span.textContent = word
                 span.setAttribute("data-word", cleanWord)
-                if (!isKnown) {
+                if (shouldMarkUnknown) {
                   span.setAttribute("data-unknown", "true")
                 }
                 fragment.appendChild(span)
