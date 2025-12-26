@@ -14,6 +14,38 @@ import { TranslationPopover } from "@/components/translation-popover"
 import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
 import { toast } from "@/lib/toast"
 
+// Helper function to mark unknown words in text
+function markUnknownWords(text: string, knownWords: Set<string>): React.ReactNode[] {
+  if (!text || knownWords.size === 0) {
+    return [text]
+  }
+
+  // Split text into words and spaces, preserving punctuation
+  const parts = text.split(/(\s+|[^\w\s]+|\w+)/g)
+  
+  return parts.map((part, index) => {
+    // Skip whitespace and punctuation-only parts
+    if (!part.trim() || /^[^\w]+$/.test(part)) {
+      return <span key={index}>{part}</span>
+    }
+    
+    // Check if word is known (normalize: lowercase, trim)
+    const normalized = part.trim().toLowerCase().replace(/[^\w]/g, "")
+    const isKnown = normalized.length > 0 && knownWords.has(normalized)
+    
+    if (isKnown) {
+      return <span key={index}>{part}</span>
+    } else {
+      // Mark as unknown word
+      return (
+        <span key={index} className="unknown-word-text" title="Unknown word">
+          {part}
+        </span>
+      )
+    }
+  })
+}
+
 // Component to highlight search term in text content
 function SearchHighlight({ searchTerm }: { searchTerm: string }) {
   const highlightedRef = useRef(false)
@@ -176,6 +208,7 @@ export default function ReaderPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const [headerMinimized, setHeaderMinimized] = useState(false)
+  const [knownWords, setKnownWords] = useState<Set<string>>(new Set())
   const router = useRouter()
 
   // Detect mobile screen size
@@ -368,6 +401,43 @@ export default function ReaderPage() {
         .catch(err => {
           console.error("Error fetching bookmarks:", err)
           setBookmarks([])
+        })
+    }
+  }, [book?.id])
+
+  // Fetch known words for this book
+  useEffect(() => {
+    if (book?.id) {
+      fetch(`/api/vocabulary?bookId=${book.id}`)
+        .then(res => {
+          if (!res.ok) {
+            console.error("Vocabulary fetch failed:", res.status, res.statusText)
+            return []
+          }
+          return res.json()
+        })
+        .then(data => {
+          if (Array.isArray(data)) {
+            // Create a Set of normalized known words (lowercase, trimmed)
+            const knownSet = new Set<string>()
+            data.forEach((item: any) => {
+              if (item.isKnown && item.termNormalized) {
+                knownSet.add(item.termNormalized.toLowerCase().trim())
+              }
+              // Also add the term itself if normalized is not available
+              if (item.isKnown && item.term) {
+                const normalized = item.term.toLowerCase().trim().replace(/\s+/g, " ")
+                knownSet.add(normalized)
+              }
+            })
+            setKnownWords(knownSet)
+          } else {
+            setKnownWords(new Set())
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching known words:", err)
+          setKnownWords(new Set())
         })
     }
   }, [book?.id])
@@ -1171,6 +1241,7 @@ export default function ReaderPage() {
               <EpubReader
                 url={epubUrl}
                 location={location}
+                knownWords={knownWords}
                 onLocationChange={(loc) => {
                   // Only update if location actually changed to prevent infinite loops
                   if (loc !== location) {
@@ -1422,7 +1493,7 @@ export default function ReaderPage() {
                       marginBottom: `var(--para-gap)`,
                     }}
                   >
-                    {paragraph.trim()}
+                    {markUnknownWords(paragraph.trim(), knownWords)}
                   </p>
                 ))}
               </article>
@@ -1526,6 +1597,8 @@ export default function ReaderPage() {
                     isKnown: true,
                   }),
                 })
+                // Update known words set
+                setKnownWords(prev => new Set(prev).add(normalized))
                 setPopoverOpen(false)
                 setSelectedText("")
                 setTranslation("")

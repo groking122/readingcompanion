@@ -574,6 +574,20 @@ button[title*="Toggle theme"] {
   background-color: hsl(var(--background));
 }
 
+/* Unknown word highlighting for text content */
+.unknown-word-text {
+  background-color: rgba(234, 179, 8, 0.25);
+  border-bottom: 2px solid rgba(234, 179, 8, 0.6);
+  padding-bottom: 1px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-radius: 2px;
+}
+
+.unknown-word-text:hover {
+  background-color: rgba(234, 179, 8, 0.4);
+}
+
 /* Settings panel animations */
 .settings-panel {
   animation: slideDown 0.2s ease-out;

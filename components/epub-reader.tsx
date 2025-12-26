@@ -20,6 +20,7 @@ interface EpubReaderProps {
   fontSize?: number
   fontFamily?: string
   lineHeight?: number
+  knownWords?: Set<string> // Set of normalized known words (lowercase, trimmed)
 }
 
 export function EpubReader({
@@ -32,6 +33,7 @@ export function EpubReader({
   fontSize = 16,
   fontFamily = "Inter",
   lineHeight = 1.6,
+  knownWords = new Set(),
 }: EpubReaderProps) {
   const viewerRef = useRef<HTMLDivElement>(null)
   const bookRef = useRef<any>(null)
@@ -82,6 +84,40 @@ export function EpubReader({
     }
   }, [rendition, fontSize, fontFamily, lineHeight])
 
+  // Re-mark unknown words when knownWords changes
+  useEffect(() => {
+    if (!viewerRef.current || !rendition) return
+
+    const updateWordMarking = () => {
+      try {
+        const iframe = viewerRef.current?.querySelector("iframe")
+        if (!iframe || !iframe.contentDocument) return
+
+        const doc = iframe.contentDocument
+        const wordSpans = doc.querySelectorAll(".epub-word")
+        
+        wordSpans.forEach((span) => {
+          const word = span.getAttribute("data-word") || ""
+          const isKnown = word.length > 0 && knownWords.has(word.toLowerCase())
+          
+          if (isKnown) {
+            span.classList.remove("unknown-word")
+            span.removeAttribute("data-unknown")
+          } else if (word.length > 0) {
+            span.classList.add("unknown-word")
+            span.setAttribute("data-unknown", "true")
+          }
+        })
+      } catch (error) {
+        console.error("Error updating word marking:", error)
+      }
+    }
+
+    // Small delay to ensure DOM is ready
+    const timeout = setTimeout(updateWordMarking, 100)
+    return () => clearTimeout(timeout)
+  }, [knownWords, rendition])
+
   // Set up word-level hover and click handlers for EPUB iframe
   useEffect(() => {
     if (!onTextSelected || !viewerRef.current || !rendition) return
@@ -117,6 +153,15 @@ export function EpubReader({
             }
             .epub-word.selected {
               background-color: rgba(59, 130, 246, 0.5) !important;
+            }
+            /* Mark unknown words with yellow highlight */
+            .epub-word.unknown-word {
+              background-color: rgba(234, 179, 8, 0.25) !important;
+              border-bottom: 2px solid rgba(234, 179, 8, 0.6) !important;
+              padding-bottom: 1px;
+            }
+            .epub-word.unknown-word:hover {
+              background-color: rgba(234, 179, 8, 0.4) !important;
             }
           `
           doc.head.appendChild(style)
@@ -168,9 +213,15 @@ export function EpubReader({
               } else {
                 // Wrap word in span
                 const span = doc.createElement("span")
-                span.className = "epub-word"
+                const cleanWord = word.trim().replace(/[^\w]/g, "").toLowerCase()
+                const isKnown = cleanWord.length > 0 && knownWords.has(cleanWord)
+                
+                span.className = isKnown ? "epub-word" : "epub-word unknown-word"
                 span.textContent = word
-                span.setAttribute("data-word", word.trim().replace(/[^\w]/g, ""))
+                span.setAttribute("data-word", cleanWord)
+                if (!isKnown) {
+                  span.setAttribute("data-unknown", "true")
+                }
                 fragment.appendChild(span)
               }
             })
