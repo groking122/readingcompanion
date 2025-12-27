@@ -14,15 +14,12 @@ import { TranslationPopover } from "@/components/translation-popover"
 import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
 import { toast } from "@/lib/toast"
 
-// Helper function to mark unknown words in text
-function markUnknownWords(text: string, knownWords: Set<string>, hasKnownWords: boolean): React.ReactNode[] {
+// Helper function to mark vocabulary words in text
+function markUnknownWords(text: string, knownWords: Set<string>, vocabularyWords: Set<string>, hasKnownWords: boolean): React.ReactNode[] {
   if (!text || !hasKnownWords) {
-    // Don't mark anything if we don't have known words data yet
+    // Don't mark anything if we haven't loaded vocabulary data yet
     return [text]
   }
-  
-  // If we have data but no known words, mark ALL words as unknown
-  // If we have known words, only mark words NOT in the set
 
   // Split text into words and spaces, preserving punctuation
   const parts = text.split(/(\s+|[^\w\s]+|\w+)/g)
@@ -33,14 +30,17 @@ function markUnknownWords(text: string, knownWords: Set<string>, hasKnownWords: 
       return <span key={index}>{part}</span>
     }
     
-    // Check if word is known (normalize: lowercase, trim, remove punctuation)
+    // Check if word is in vocabulary (normalize: lowercase, trim, remove punctuation)
     const normalized = part.trim().toLowerCase().replace(/[^\w]/g, "")
     
-    // Only mark as unknown if word has letters/numbers and is not in known set
-    if (normalized.length > 0 && !knownWords.has(normalized)) {
-      // Mark as unknown word
+    // Mark as vocabulary word if:
+    // - Word has letters/numbers
+    // - Word is in vocabulary set (saved but not marked as known)
+    // - Word is NOT in the known set
+    if (normalized.length > 0 && vocabularyWords.has(normalized) && !knownWords.has(normalized)) {
+      // Mark as vocabulary word (saved but not known)
       return (
-        <span key={index} className="unknown-word-text" title="Unknown word">
+        <span key={index} className="unknown-word-text" title="Saved to vocabulary">
           {part}
         </span>
       )
@@ -213,6 +213,7 @@ export default function ReaderPage() {
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const [headerMinimized, setHeaderMinimized] = useState(false)
   const [knownWords, setKnownWords] = useState<Set<string>>(new Set())
+  const [vocabularyWords, setVocabularyWords] = useState<Set<string>>(new Set()) // Words saved to vocabulary (not marked as known)
   const [hasKnownWordsData, setHasKnownWordsData] = useState(false)
   const router = useRouter()
 
@@ -410,7 +411,7 @@ export default function ReaderPage() {
     }
   }, [book?.id])
 
-  // Fetch known words for this book
+  // Fetch vocabulary words for this book
   useEffect(() => {
     if (book?.id) {
       setHasKnownWordsData(false) // Reset flag while fetching
@@ -424,42 +425,54 @@ export default function ReaderPage() {
         })
         .then(data => {
           if (Array.isArray(data)) {
-            // Create a Set of normalized known words (lowercase, trimmed, punctuation removed)
+            // Create Sets of normalized words
             const knownSet = new Set<string>()
+            const vocabSet = new Set<string>() // Words saved to vocabulary but NOT marked as known
+            
             data.forEach((item: any) => {
-              if (item.isKnown) {
-                // Normalize the word - prefer termNormalized if available, otherwise use term
-                let normalized: string | null = null
-                
-                if (item.termNormalized) {
-                  normalized = item.termNormalized.toLowerCase().trim().replace(/[^\w]/g, "")
-                } else if (item.term) {
-                  normalized = item.term.toLowerCase().trim().replace(/[^\w]/g, "")
-                }
-                
-                // Add only once to avoid duplicates
-                if (normalized && normalized.length > 0) {
+              // Normalize the word - prefer termNormalized if available, otherwise use term
+              let normalized: string | null = null
+              
+              if (item.termNormalized) {
+                normalized = item.termNormalized.toLowerCase().trim().replace(/[^\w]/g, "")
+              } else if (item.term) {
+                normalized = item.term.toLowerCase().trim().replace(/[^\w]/g, "")
+              }
+              
+              if (normalized && normalized.length > 0) {
+                if (item.isKnown) {
+                  // Add to known words set
                   knownSet.add(normalized)
+                } else {
+                  // Add to vocabulary words set (saved but not known)
+                  vocabSet.add(normalized)
                 }
               }
             })
+            
             console.log("Loaded known words:", knownSet.size, Array.from(knownSet).slice(0, 10))
-            console.log("Total vocabulary items:", data.length, "Known items:", data.filter((item: any) => item.isKnown).length)
+            console.log("Loaded vocabulary words (not known):", vocabSet.size, Array.from(vocabSet).slice(0, 10))
+            console.log("Total vocabulary items:", data.length, "Known:", knownSet.size, "Not known:", vocabSet.size)
+            
             setKnownWords(knownSet)
+            setVocabularyWords(vocabSet)
             setHasKnownWordsData(true) // Mark that we have data (even if empty)
           } else {
             setKnownWords(new Set())
+            setVocabularyWords(new Set())
             setHasKnownWordsData(true)
           }
         })
         .catch(err => {
-          console.error("Error fetching known words:", err)
+          console.error("Error fetching vocabulary:", err)
           setKnownWords(new Set())
+          setVocabularyWords(new Set())
           setHasKnownWordsData(true) // Still mark as loaded to avoid marking all words
         })
     } else {
       setHasKnownWordsData(false)
       setKnownWords(new Set())
+      setVocabularyWords(new Set())
     }
   }, [book?.id])
 
@@ -872,9 +885,15 @@ export default function ReaderPage() {
         const data = await response.json()
         setSavedWordId(data.id)
         
-        // Note: Saved words are NOT automatically marked as known
-        // They will still be highlighted as unknown until marked as known
-        // This is correct behavior - saving to vocabulary doesn't mean you know it yet
+        // Add word to vocabulary words set so it gets highlighted immediately
+        const normalized = selectedText.trim().toLowerCase().replace(/[^\w]/g, "")
+        if (normalized.length > 0) {
+          setVocabularyWords(prev => {
+            const newSet = new Set(prev)
+            newSet.add(normalized)
+            return newSet
+          })
+        }
         
         // Show toast notification
         const isPhrase = selectedText.split(/\s+/).length > 1
@@ -1267,6 +1286,7 @@ export default function ReaderPage() {
                 url={epubUrl}
                 location={location}
                 knownWords={knownWords}
+                vocabularyWords={vocabularyWords}
                 hasKnownWordsData={hasKnownWordsData}
                 onLocationChange={(loc) => {
                   // Only update if location actually changed to prevent infinite loops
@@ -1519,7 +1539,7 @@ export default function ReaderPage() {
                       marginBottom: `var(--para-gap)`,
                     }}
                   >
-                    {markUnknownWords(paragraph.trim(), knownWords, hasKnownWordsData)}
+                    {markUnknownWords(paragraph.trim(), knownWords, vocabularyWords, hasKnownWordsData)}
                   </p>
                 ))}
               </article>
@@ -1632,6 +1652,12 @@ export default function ReaderPage() {
                   }
                   return newSet
                 })
+                // Remove from vocabulary words set (since it's now known)
+                setVocabularyWords(prev => {
+                  const newSet = new Set(prev)
+                  newSet.delete(normalized)
+                  return newSet
+                })
                 setPopoverOpen(false)
                 setSelectedText("")
                 setTranslation("")
@@ -1709,6 +1735,12 @@ export default function ReaderPage() {
                   if (normalized.length > 0) {
                     newSet.add(normalized)
                   }
+                  return newSet
+                })
+                // Remove from vocabulary words set (since it's now known)
+                setVocabularyWords(prev => {
+                  const newSet = new Set(prev)
+                  newSet.delete(normalized)
                   return newSet
                 })
                 setPopoverOpen(false)

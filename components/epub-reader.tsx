@@ -21,7 +21,8 @@ interface EpubReaderProps {
   fontFamily?: string
   lineHeight?: number
   knownWords?: Set<string> // Set of normalized known words (lowercase, trimmed)
-  hasKnownWordsData?: boolean // Whether known words data has been loaded
+  vocabularyWords?: Set<string> // Set of normalized vocabulary words (saved but not known)
+  hasKnownWordsData?: boolean // Whether vocabulary data has been loaded
 }
 
 export function EpubReader({
@@ -35,6 +36,7 @@ export function EpubReader({
   fontFamily = "Inter",
   lineHeight = 1.6,
   knownWords = new Set(),
+  vocabularyWords = new Set(),
   hasKnownWordsData = false,
 }: EpubReaderProps) {
   const viewerRef = useRef<HTMLDivElement>(null)
@@ -100,17 +102,20 @@ export function EpubReader({
         
         wordSpans.forEach((span) => {
           const word = span.getAttribute("data-word") || ""
-          const isKnown = word.length > 0 && knownWords.has(word.toLowerCase())
+          const wordLower = word.toLowerCase()
+          const isKnown = word.length > 0 && knownWords.has(wordLower)
+          const isInVocabulary = word.length > 0 && vocabularyWords.has(wordLower)
           
           if (isKnown) {
+            // Known words should not be highlighted
             span.classList.remove("unknown-word")
             span.removeAttribute("data-unknown")
-          } else if (word.length > 0) {
-            // Mark as unknown if word is not known (or if no known words exist, mark all)
+          } else if (isInVocabulary) {
+            // Words in vocabulary (but not known) should be highlighted
             span.classList.add("unknown-word")
             span.setAttribute("data-unknown", "true")
           } else {
-            // Remove unknown marking for empty words
+            // Words not in vocabulary should not be highlighted
             span.classList.remove("unknown-word")
             span.removeAttribute("data-unknown")
           }
@@ -123,7 +128,7 @@ export function EpubReader({
     // Small delay to ensure DOM is ready
     const timeout = setTimeout(updateWordMarking, 100)
     return () => clearTimeout(timeout)
-  }, [knownWords, hasKnownWordsData, rendition])
+  }, [knownWords, vocabularyWords, hasKnownWordsData, rendition])
 
   // Set up word-level hover and click handlers for EPUB iframe
   useEffect(() => {
@@ -222,13 +227,15 @@ export function EpubReader({
                 const span = doc.createElement("span")
                 const cleanWord = word.trim().replace(/[^\w]/g, "").toLowerCase()
                 
-                // Mark as unknown if:
-                // 1. We have loaded known words data
+                // Mark as vocabulary word if:
+                // 1. We have loaded vocabulary data
                 // 2. Word has content (letters/numbers)
-                // 3. Either: no known words exist (mark all) OR word is not in known set
+                // 3. Word is in vocabulary set (saved but not known)
+                // 4. Word is NOT in the known set
                 const shouldMarkUnknown = hasKnownWordsData && 
                                          cleanWord.length > 0 && 
-                                         (knownWords.size === 0 || !knownWords.has(cleanWord))
+                                         vocabularyWords.has(cleanWord) && 
+                                         !knownWords.has(cleanWord)
                 
                 span.className = shouldMarkUnknown ? "epub-word unknown-word" : "epub-word"
                 span.textContent = word
