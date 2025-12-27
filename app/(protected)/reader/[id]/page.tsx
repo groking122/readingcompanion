@@ -210,6 +210,7 @@ export default function ReaderPage() {
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
   const [headerMinimized, setHeaderMinimized] = useState(false)
   const [knownWords, setKnownWords] = useState<Set<string>>(new Set())
+  const [hasKnownWordsData, setHasKnownWordsData] = useState(false)
   const router = useRouter()
 
   // Detect mobile screen size
