@@ -105,12 +105,12 @@ export function EpubReader({
           if (isKnown) {
             span.classList.remove("unknown-word")
             span.removeAttribute("data-unknown")
-          } else if (word.length > 0 && knownWords.size > 0) {
-            // Only mark as unknown if we have known words data and word is not known
+          } else if (word.length > 0) {
+            // Mark as unknown if word is not known (or if no known words exist, mark all)
             span.classList.add("unknown-word")
             span.setAttribute("data-unknown", "true")
           } else {
-            // Remove unknown marking if we don't have data yet
+            // Remove unknown marking for empty words
             span.classList.remove("unknown-word")
             span.removeAttribute("data-unknown")
           }
@@ -222,12 +222,13 @@ export function EpubReader({
                 const span = doc.createElement("span")
                 const cleanWord = word.trim().replace(/[^\w]/g, "").toLowerCase()
                 
-                // Only mark as unknown if we have loaded known words data AND word is not known
-                // If we haven't loaded data yet (hasKnownWordsData is false), don't mark anything
+                // Mark as unknown if:
+                // 1. We have loaded known words data
+                // 2. Word has content (letters/numbers)
+                // 3. Either: no known words exist (mark all) OR word is not in known set
                 const shouldMarkUnknown = hasKnownWordsData && 
                                          cleanWord.length > 0 && 
-                                         knownWords.size > 0 && 
-                                         !knownWords.has(cleanWord)
+                                         (knownWords.size === 0 || !knownWords.has(cleanWord))
                 
                 span.className = shouldMarkUnknown ? "epub-word unknown-word" : "epub-word"
                 span.textContent = word

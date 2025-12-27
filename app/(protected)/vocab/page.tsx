@@ -242,13 +242,41 @@ export default function VocabPage() {
     }
   }
 
-  const filteredVocab = Array.isArray(vocab) ? vocab.filter((item) => {
+  // Helper function to normalize terms for deduplication
+  const normalizeTerm = (term: string): string => {
+    return term.toLowerCase().trim().replace(/[^\w]/g, "")
+  }
+
+  // Deduplicate vocabulary by normalized term (keep the most recent one)
+  const deduplicatedVocab = Array.isArray(vocab) ? vocab.reduce((acc: Vocabulary[], item) => {
+    const normalized = normalizeTerm(item.term)
+    const existingIndex = acc.findIndex(existing => normalizeTerm(existing.term) === normalized)
+    
+    if (existingIndex === -1) {
+      // New word, add it
+      acc.push(item)
+    } else {
+      // Duplicate found - keep the most recent one (based on createdAt)
+      const existing = acc[existingIndex]
+      const existingDate = new Date(existing.createdAt).getTime()
+      const newDate = new Date(item.createdAt).getTime()
+      
+      if (newDate > existingDate) {
+        // Replace with newer entry
+        acc[existingIndex] = item
+      }
+    }
+    
+    return acc
+  }, []) : []
+
+  const filteredVocab = deduplicatedVocab.filter((item) => {
     const matchesSearch =
       item.term.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.translation.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesBook = selectedBookId === "all" || item.bookId === selectedBookId
     return matchesSearch && matchesBook
-  }) : []
+  })
 
   const getBookTitle = (bookId: string) => {
     return books.find((b) => b.id === bookId)?.title || "Unknown Book"
