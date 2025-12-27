@@ -332,12 +332,12 @@ export default function VocabPage() {
             </div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2 tracking-tight">My Vocabulary</h1>
             <p className="text-muted-foreground text-lg">
-              {vocab.length === 0 ? (
+              {deduplicatedVocab.length === 0 ? (
                 "Start building your vocabulary"
               ) : (
                 <>
-                  {vocab.length} {vocab.length === 1 ? "word" : "words"} saved
-                  {filteredVocab.length !== vocab.length && (
+                  {deduplicatedVocab.length} {deduplicatedVocab.length === 1 ? "word" : "words"} saved
+                  {filteredVocab.length !== deduplicatedVocab.length && (
                     <span className="ml-2 text-sm">
                       ({filteredVocab.length} {filteredVocab.length === 1 ? "shown" : "shown"})
                     </span>
