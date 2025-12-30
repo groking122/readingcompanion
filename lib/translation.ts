@@ -34,6 +34,59 @@ async function saveTranslation(text: string, translated: string) {
   });
 }
 
+// Get alternative translations using MyMemory Translation API (free, provides alternatives)
+async function getAlternativeTranslations(text: string, mainTranslation: string): Promise<string[]> {
+  try {
+    // Clean the text (remove extra spaces, lowercase for single words)
+    const cleanText = text.trim().toLowerCase();
+    const isSingleWord = /^[a-zA-Z]+$/.test(cleanText);
+    
+    if (!isSingleWord) {
+      // For phrases, return empty alternatives (DeepL handles phrases well)
+      return [];
+    }
+
+    // Use MyMemory Translation API to get alternatives
+    // This API provides multiple translation options
+    const response = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|el&de=your-email@example.com`
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    const alternatives: string[] = [];
+
+    // MyMemory returns matches array with different translations
+    if (data.matches && Array.isArray(data.matches)) {
+      const seen = new Set<string>([mainTranslation.toLowerCase()]);
+      
+      for (const match of data.matches) {
+        if (match.translation && match.quality > 0.5) {
+          const alt = match.translation.trim();
+          const altLower = alt.toLowerCase();
+          
+          // Avoid duplicates and the main translation
+          if (!seen.has(altLower) && alt !== mainTranslation) {
+            alternatives.push(alt);
+            seen.add(altLower);
+            
+            // Limit to 10 alternatives
+            if (alternatives.length >= 10) break;
+          }
+        }
+      }
+    }
+
+    return alternatives;
+  } catch (error) {
+    console.error("Error fetching alternative translations:", error);
+    return [];
+  }
+}
+
 // DeepL translation
 async function translateDeepL(text: string): Promise<{ translatedText: string; alternatives?: string[] }> {
   const apiKey = process.env.DEEPL_API_KEY;
@@ -46,9 +99,6 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
   const apiUrl = useFreeApi 
     ? "https://api-free.deepl.com/v2/translate"
     : "https://api.deepl.com/v2/translate";
-  
-  // Request more alternatives for Pro (12) vs Free (6)
-  const alternativesCount = useFreeApi ? 6 : 12;
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -59,7 +109,6 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
     body: JSON.stringify({
       text: [text],
       target_lang: "EL", // Greek
-      alternatives: alternativesCount, // Get more alternatives for Pro
     }),
   });
 
@@ -70,10 +119,9 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
 
   const data = await response.json();
   const mainTranslation = data.translations[0].text;
-  const alternatives = data.translations[0].alternatives
-    ?.map((alt: any) => alt.text)
-    .filter((alt: string) => alt !== mainTranslation)
-    .slice(0, alternativesCount) || []; // Return all requested alternatives
+  
+  // Get alternative translations using MyMemory API (for single words)
+  const alternatives = await getAlternativeTranslations(text, mainTranslation);
   
   return {
     translatedText: mainTranslation,
