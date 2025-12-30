@@ -41,7 +41,13 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
     throw new Error("DEEPL_API_KEY is not set");
   }
 
-  const response = await fetch("https://api-free.deepl.com/v2/translate", {
+  // Determine API endpoint: use Pro endpoint by default, or Free if DEEPL_API_FREE=true
+  const useFreeApi = process.env.DEEPL_API_FREE === "true";
+  const apiUrl = useFreeApi 
+    ? "https://api-free.deepl.com/v2/translate"
+    : "https://api.deepl.com/v2/translate";
+
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       "Authorization": `DeepL-Auth-Key ${apiKey}`,
@@ -55,7 +61,8 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
   });
 
   if (!response.ok) {
-    throw new Error(`DeepL API error: ${response.statusText}`);
+    const errorText = await response.text().catch(() => response.statusText);
+    throw new Error(`DeepL API error: ${response.status} ${response.statusText} - ${errorText}`);
   }
 
   const data = await response.json();
