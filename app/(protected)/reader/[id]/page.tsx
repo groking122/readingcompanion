@@ -1630,6 +1630,9 @@ export default function ReaderPage() {
             isPhrase={isPhrase(selectedText)}
             context={selectedContext}
             onSave={handleSaveWord}
+            onTranslationChange={(newTranslation) => {
+              setTranslation(newTranslation)
+            }}
             onMarkKnown={async () => {
               try {
                 // Mark as known without saving to vocabulary
@@ -1715,6 +1718,9 @@ export default function ReaderPage() {
             context={selectedContext}
             selectionPosition={popoverPosition}
             onSave={handleSaveWord}
+            onTranslationChange={(newTranslation) => {
+              setTranslation(newTranslation)
+            }}
             onMarkKnown={async () => {
               try {
                 // Mark as known without saving to vocabulary

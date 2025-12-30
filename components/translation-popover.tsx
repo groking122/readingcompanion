@@ -21,6 +21,7 @@ interface TranslationPopoverProps {
   onSave: () => void
   onUndo: () => void
   onMarkKnown?: () => void
+  onTranslationChange?: (newTranslation: string) => void
   selectionPosition?: { x: number; y: number; width: number; height: number }
 }
 
@@ -38,6 +39,7 @@ export function TranslationPopover({
   onSave,
   onUndo,
   onMarkKnown,
+  onTranslationChange,
   selectionPosition,
 }: TranslationPopoverProps) {
   const [mounted, setMounted] = useState(false)
@@ -174,6 +176,7 @@ export function TranslationPopover({
           onSave={onSave}
           onUndo={onUndo}
           onMarkKnown={onMarkKnown}
+          onTranslationChange={onTranslationChange}
           compact={true}
         />
       </div>

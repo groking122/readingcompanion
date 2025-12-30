@@ -34,57 +34,91 @@ async function saveTranslation(text: string, translated: string) {
   });
 }
 
-// Get alternative translations using MyMemory Translation API (free, provides alternatives)
+// Get alternative translations from multiple sources for better coverage
 async function getAlternativeTranslations(text: string, mainTranslation: string): Promise<string[]> {
-  try {
-    // Clean the text (remove extra spaces, lowercase for single words)
-    const cleanText = text.trim().toLowerCase();
-    const isSingleWord = /^[a-zA-Z]+$/.test(cleanText);
-    
-    if (!isSingleWord) {
-      // For phrases, return empty alternatives (DeepL handles phrases well)
-      return [];
-    }
+  const alternatives: string[] = [];
+  const seen = new Set<string>([mainTranslation.toLowerCase().trim()]);
+  
+  // Clean the text (remove extra spaces, lowercase for single words)
+  const cleanText = text.trim().toLowerCase();
+  const isSingleWord = /^[a-zA-Z]+$/.test(cleanText);
+  
+  if (!isSingleWord) {
+    // For phrases, return empty alternatives (DeepL handles phrases well)
+    return [];
+  }
 
-    // Use MyMemory Translation API to get alternatives
-    // This API provides multiple translation options
-    const response = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|el&de=your-email@example.com`
+  // Source 1: MyMemory Translation API (free, provides alternatives)
+  try {
+    const myMemoryResponse = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|el&de=your-email@example.com`,
+      { signal: AbortSignal.timeout(3000) } // 3 second timeout
     );
 
-    if (!response.ok) {
-      return [];
-    }
-
-    const data = await response.json();
-    const alternatives: string[] = [];
-
-    // MyMemory returns matches array with different translations
-    if (data.matches && Array.isArray(data.matches)) {
-      const seen = new Set<string>([mainTranslation.toLowerCase()]);
+    if (myMemoryResponse.ok) {
+      const data = await myMemoryResponse.json();
       
-      for (const match of data.matches) {
-        if (match.translation && match.quality > 0.5) {
-          const alt = match.translation.trim();
-          const altLower = alt.toLowerCase();
-          
-          // Avoid duplicates and the main translation
-          if (!seen.has(altLower) && alt !== mainTranslation) {
-            alternatives.push(alt);
-            seen.add(altLower);
+      if (data.matches && Array.isArray(data.matches)) {
+        for (const match of data.matches) {
+          if (match.translation && match.quality > 0.5) {
+            const alt = match.translation.trim();
+            const altLower = alt.toLowerCase();
             
-            // Limit to 10 alternatives
-            if (alternatives.length >= 10) break;
+            if (!seen.has(altLower) && alt !== mainTranslation) {
+              alternatives.push(alt);
+              seen.add(altLower);
+            }
           }
         }
       }
     }
-
-    return alternatives;
   } catch (error) {
-    console.error("Error fetching alternative translations:", error);
-    return [];
+    // Silently fail - we have other sources
   }
+
+  // Source 2: LibreTranslate (if available) - get a different perspective
+  try {
+    const libreApiUrl = process.env.LIBRETRANSLATE_API_URL || "https://libretranslate.com/translate";
+    const libreApiKey = process.env.LIBRETRANSLATE_API_KEY;
+    
+    const libreBody: any = {
+      q: text,
+      source: "en",
+      target: "el",
+      format: "text",
+    };
+    
+    if (libreApiKey) {
+      libreBody.api_key = libreApiKey;
+    }
+
+    const libreResponse = await fetch(libreApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(libreBody),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (libreResponse.ok) {
+      const libreData = await libreResponse.json();
+      if (libreData.translatedText) {
+        const alt = libreData.translatedText.trim();
+        const altLower = alt.toLowerCase();
+        
+        if (!seen.has(altLower) && alt !== mainTranslation) {
+          alternatives.push(alt);
+          seen.add(altLower);
+        }
+      }
+    }
+  } catch (error) {
+    // Silently fail - optional source
+  }
+
+  // Sort by length (shorter translations often more common) and limit to 12
+  return alternatives
+    .sort((a, b) => a.length - b.length)
+    .slice(0, 12);
 }
 
 // DeepL translation

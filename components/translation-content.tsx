@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Loader2, ChevronDown, ChevronUp } from "lucide-react"
@@ -18,6 +18,7 @@ interface TranslationContentProps {
   onSave: () => void
   onUndo: () => void
   onMarkKnown?: () => void
+  onTranslationChange?: (newTranslation: string) => void // Callback when user selects an alternative
   compact?: boolean // For popover vs drawer
 }
 
@@ -33,10 +34,17 @@ export function TranslationContent({
   onSave,
   onUndo,
   onMarkKnown,
+  onTranslationChange,
   compact = false,
 }: TranslationContentProps) {
   const [showContext, setShowContext] = useState(false)
   const [showMoreMeanings, setShowMoreMeanings] = useState(false)
+  const [selectedTranslation, setSelectedTranslation] = useState(translation)
+  
+  // Update selected translation when main translation changes
+  useEffect(() => {
+    setSelectedTranslation(translation)
+  }, [translation])
 
   return (
     <div className={cn("flex flex-col", compact ? "w-full" : "w-full")}>
@@ -52,13 +60,13 @@ export function TranslationContent({
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Main translation - prominent */}
+                {/* Main translation - prominent (shows selected translation) */}
                 <div>
                   <p className={cn(
                     "break-words font-medium",
                     compact ? "text-lg" : "text-xl"
                   )}>
-                    {translation}
+                    {selectedTranslation}
                   </p>
                 </div>
 
@@ -118,14 +126,27 @@ export function TranslationContent({
                     </button>
                     {showMoreMeanings && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        {alternativeTranslations.map((alt, idx) => (
-                          <span
-                            key={idx}
-                            className="text-xs px-2.5 py-1.5 rounded-md bg-muted/80 text-foreground border border-border text-center"
-                          >
-                            {alt}
-                          </span>
-                        ))}
+                        {alternativeTranslations.map((alt, idx) => {
+                          const isSelected = selectedTranslation === alt
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setSelectedTranslation(alt)
+                                onTranslationChange?.(alt)
+                              }}
+                              className={cn(
+                                "text-xs px-2.5 py-1.5 rounded-md border text-center transition-all",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground border-primary font-medium shadow-sm"
+                                  : "bg-muted/80 text-foreground border-border hover:bg-muted hover:border-primary/50 cursor-pointer"
+                              )}
+                              title={isSelected ? "Selected translation" : "Click to use this translation"}
+                            >
+                              {alt}
+                            </button>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

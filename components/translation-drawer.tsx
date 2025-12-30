@@ -21,6 +21,7 @@ interface TranslationDrawerProps {
   onSave: () => void
   onUndo: () => void
   onMarkKnown?: () => void
+  onTranslationChange?: (newTranslation: string) => void
 }
 
 export function TranslationDrawer({
@@ -37,6 +38,7 @@ export function TranslationDrawer({
   onSave,
   onUndo,
   onMarkKnown,
+  onTranslationChange,
 }: TranslationDrawerProps) {
   const [mounted, setMounted] = useState(false)
 
@@ -114,6 +116,7 @@ export function TranslationDrawer({
             onSave={onSave}
             onUndo={onUndo}
             onMarkKnown={onMarkKnown}
+            onTranslationChange={onTranslationChange}
             compact={false}
           />
         </div>
