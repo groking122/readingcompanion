@@ -46,6 +46,9 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
   const apiUrl = useFreeApi 
     ? "https://api-free.deepl.com/v2/translate"
     : "https://api.deepl.com/v2/translate";
+  
+  // Request more alternatives for Pro (12) vs Free (6)
+  const alternativesCount = useFreeApi ? 6 : 12;
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -56,7 +59,7 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
     body: JSON.stringify({
       text: [text],
       target_lang: "EL", // Greek
-      alternatives: 6, // Get up to 6 alternative translations (we'll show top 2-3 in UI)
+      alternatives: alternativesCount, // Get more alternatives for Pro
     }),
   });
 
@@ -70,7 +73,7 @@ async function translateDeepL(text: string): Promise<{ translatedText: string; a
   const alternatives = data.translations[0].alternatives
     ?.map((alt: any) => alt.text)
     .filter((alt: string) => alt !== mainTranslation)
-    .slice(0, 6) || []; // Show up to 6 alternative translations
+    .slice(0, alternativesCount) || []; // Return all requested alternatives
   
   return {
     translatedText: mainTranslation,

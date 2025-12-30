@@ -118,7 +118,7 @@ export function TranslationContent({
                     </button>
                     {showMoreMeanings && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
-                        {alternativeTranslations.slice(0, 6).map((alt, idx) => (
+                        {alternativeTranslations.map((alt, idx) => (
                           <span
                             key={idx}
                             className="text-xs px-2.5 py-1.5 rounded-md bg-muted/80 text-foreground border border-border text-center"
