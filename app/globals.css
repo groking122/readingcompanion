@@ -4,9 +4,11 @@
 
 @layer base {
   :root {
-    /* Design Tokens - Color System */
-    --background: 0 0% 100%;
+    /* Light Theme - Lexis Design System */
+    /* Background: #F4F5F7 (Soft Light Grey) */
+    --background: 220 14% 96%;
     --foreground: 222.2 84% 4.9%;
+    /* Cards: #FFFFFF (Pure White) */
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
@@ -21,10 +23,18 @@
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    /* Border: #E5E7EB (Subtle Border) */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+    
+    /* Light Theme Additional Colors */
+    --bg-color: 220 14% 96%;  /* #F4F5F7 */
+    --card-bg: 0 0% 100%;     /* #FFFFFF */
+    --text-main: 222.2 84% 4.9%; /* #111827 */
+    --text-muted: 215.4 16.3% 46.9%; /* #6B7280 */
+    --border-color: 220 13% 91%; /* #E5E7EB */
     
     /* Semantic Colors */
     --success: 142 71% 45%;
@@ -58,26 +68,32 @@
   }
 
   .dark {
-    /* Dark mode colors - CSS variables change instantly for synchronized transitions */
-    --background: 0 0% 3%;
+    /* Cinematic Dark Mode - Lexis Design System */
+    /* Background: #0a0a0c (Midnight Navy - warm undertone) */
+    --background: 240 9% 4%;
     --foreground: 210 40% 98%;
-    --card: 0 0% 5%;
+    /* Surface/Cards: #131316 (Slightly lighter than background) */
+    --card: 240 7% 8%;
     --card-foreground: 210 40% 98%;
-    --popover: 0 0% 5%;
+    --popover: 240 7% 8%;
     --popover-foreground: 210 40% 98%;
     --primary: 210 40% 98%;
-    --primary-foreground: 0 0% 3%;
-    --secondary: 0 0% 8%;
+    --primary-foreground: 240 9% 4%;
+    --secondary: 240 7% 10%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 0 0% 8%;
+    --muted: 240 7% 10%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 0 0% 8%;
+    --accent: 240 7% 10%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 0 0% 12%;
-    --input: 0 0% 12%;
+    --border: 240 7% 12%;
+    --input: 240 7% 12%;
     --ring: 212.7 26.8% 83.9%;
+    
+    /* Lexis Accent Colors */
+    --amber: 38 92% 60%; /* Reading lamp theme */
+    --violet: 270 80% 65%; /* AI/intelligence */
   }
   
   /* Ensure CSS variables transition smoothly */
@@ -100,19 +116,19 @@
   
   /* Improved typography scale */
   h1 {
-    @apply text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight;
+    @apply text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight font-serif;
     letter-spacing: -0.03em;
     line-height: 1.1;
   }
   
   h2 {
-    @apply text-2xl md:text-3xl font-semibold tracking-tight;
+    @apply text-2xl md:text-3xl font-semibold tracking-tight font-serif;
     letter-spacing: -0.02em;
     line-height: 1.2;
   }
   
   h3 {
-    @apply text-xl md:text-2xl font-semibold;
+    @apply text-xl md:text-2xl font-semibold font-serif;
     letter-spacing: -0.01em;
   }
   
@@ -239,6 +255,106 @@
   .pattern-dots {
     background-image: radial-gradient(circle, hsl(var(--muted-foreground) / 0.1) 1px, transparent 1px);
     background-size: 20px 20px;
+  }
+  
+  /* Lexis Bento Card Component */
+  .bento-card {
+    border-radius: 24px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border-color));
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Dark mode: gradient border and top highlight */
+  .dark .bento-card {
+    border: 1px solid transparent;
+    background-image: 
+      linear-gradient(hsl(var(--card)), hsl(var(--card))),
+      linear-gradient(135deg, transparent, rgba(255,255,255,0.08), transparent);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: none;
+  }
+  
+  .dark .bento-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+    z-index: 1;
+  }
+  
+  .bento-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+  
+  /* Noise texture utility */
+  .noise-texture {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  
+  /* Glowing progress bar */
+  .glow-progress {
+    height: 4px;
+    background: linear-gradient(90deg, 
+      hsl(38, 92%, 60%) 0%, 
+      hsl(270, 80%, 65%) 100%);
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+    border-radius: 2px;
+    transition: width 0.3s ease-out;
+  }
+  
+  /* Glassmorphism effect */
+  .glass-card {
+    background: rgba(19, 19, 22, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 
+      0 8px 32px 0 rgba(0, 0, 0, 0.37),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  }
+  
+  /* Word Chip with 3D Flip Animation */
+  .word-chip {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .word-chip-back {
+    transform: rotateY(180deg);
+    backface-visibility: hidden;
+  }
+  
+  .word-chip:hover {
+    transform: rotateY(180deg) scale(1.05);
+  }
+  
+  /* Book spine hover effect */
+  .book-spine {
+    position: relative;
+  }
+  
+  .book-spine:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset -2px 0 4px rgba(0,0,0,0.3);
+  }
+  
+  /* Mobile: smaller border radius */
+  @media (max-width: 768px) {
+    .bento-card {
+      border-radius: 16px;
+    }
   }
 }
 
@@ -715,6 +831,159 @@ button:active::before, a[role="button"]:active::before {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Hero Section - Pure Content Design */
+@layer utilities {
+  /* Gradient float animation for hero background */
+  @keyframes gradientFloat {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    33% {
+      transform: translate(20px, -20px) scale(1.05);
+    }
+    66% {
+      transform: translate(-15px, 15px) scale(0.95);
+    }
+  }
+
+  @keyframes gradientFloatReverse {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    33% {
+      transform: translate(-20px, 20px) scale(0.95);
+    }
+    66% {
+      transform: translate(15px, -15px) scale(1.05);
+    }
+  }
+
+  /* Glass morphism effect */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 
+      0 8px 32px 0 rgba(0, 0, 0, 0.37),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  /* Cursor blink animation */
+  @keyframes cursorBlink {
+    0%, 50% {
+      opacity: 1;
+    }
+    51%, 100% {
+      opacity: 0;
+    }
+  }
+
+  .cursor-blink::after {
+    content: '|';
+    animation: cursorBlink 1s infinite;
+    margin-left: 2px;
+    color: currentColor;
+  }
+
+  /* Hero gradient backgrounds */
+  .hero-gradient-teal {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(45, 212, 191, 0.4) 0%, rgba(45, 212, 191, 0.1) 40%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(60px);
+    animation: gradientFloat 25s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .hero-gradient-violet {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.4) 0%, rgba(167, 139, 250, 0.1) 40%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(60px);
+    animation: gradientFloatReverse 30s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  @media (min-width: 768px) {
+    .hero-gradient-teal,
+    .hero-gradient-violet {
+      width: 600px;
+      height: 600px;
+    }
+  }
+
+  /* Hero container */
+  .hero-container {
+    position: relative;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #0A0A0C;
+    border-radius: 0;
+  }
+
+  /* Hero fade-in animation */
+  .hero-fade-in {
+    animation: heroFadeIn 0.8s ease-out;
+  }
+
+  .hero-fade-in-delay-1 {
+    animation: heroFadeIn 0.8s ease-out 0.2s both;
+  }
+
+  .hero-fade-in-delay-2 {
+    animation: heroFadeIn 0.8s ease-out 0.4s both;
+  }
+
+  @keyframes heroFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Highlighted word effect */
+  .highlighted-word {
+    position: relative;
+    color: #2dd4bf;
+    font-weight: 600;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: rgba(45, 212, 191, 0.1);
+    transition: all 0.3s ease;
+  }
+
+  .highlighted-word:hover {
+    background: rgba(45, 212, 191, 0.2);
+    transform: scale(1.05);
+  }
+
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .hero-gradient-teal,
+    .hero-gradient-violet {
+      animation: none;
+    }
+    
+    .cursor-blink::after {
+      animation: none;
+      opacity: 1;
+    }
   }
 }
 

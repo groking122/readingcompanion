@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { BookOpen, Heart, Sparkles, BookMarked, RotateCcw, ChevronDown, ChevronUp, ExternalLink } from "lucide-react"
+import { useUser } from "@clerk/nextjs"
 import Link from "next/link"
 
 interface Book {
@@ -11,6 +12,17 @@ interface Book {
   title: string
   createdAt: string
   type: string
+}
+
+interface Bookmark {
+  id: string
+  bookId: string
+  title: string | null
+  epubLocation: string | null
+  pageNumber: number | null
+  position: number | null
+  progressPercentage?: number | null
+  updatedAt: string
 }
 
 interface WishlistItem {
@@ -24,6 +36,7 @@ interface VocabularyItem {
   id: string
   term: string
   translation: string
+  context?: string
   bookId: string
 }
 
@@ -36,12 +49,25 @@ interface Flashcard {
 }
 
 export default function HomePage() {
+  const { user } = useUser()
   const [currentBook, setCurrentBook] = useState<Book | null>(null)
   const [books, setBooks] = useState<Book[]>([])
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [vocabularyItems, setVocabularyItems] = useState<VocabularyItem[]>([])
   const [flashcards, setFlashcards] = useState<Flashcard[]>([])
+  const [bookProgress, setBookProgress] = useState<{ [bookId: string]: number }>({})
   const [loading, setLoading] = useState(true)
+  
+  // Get user's first name for greeting
+  const userName = user?.firstName || user?.username || "there"
+  
+  // Get time-based greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return "Good Morning"
+    if (hour < 18) return "Good Afternoon"
+    return "Good Evening"
+  }
   
   // Expanded states for each widget
   const [expanded, setExpanded] = useState({
@@ -69,7 +95,38 @@ export default function HomePage() {
         const booksData = await booksRes.json()
         const booksArray = Array.isArray(booksData) ? booksData : []
         setBooks(booksArray)
-        setCurrentBook(booksArray.length > 0 ? booksArray[booksArray.length - 1] : null)
+        const latestBook = booksArray.length > 0 ? booksArray[booksArray.length - 1] : null
+        setCurrentBook(latestBook)
+        
+        // Fetch bookmarks for progress calculation
+        if (latestBook) {
+          try {
+            const bookmarksRes = await fetch(`/api/bookmarks?bookId=${latestBook.id}`)
+            if (bookmarksRes.ok) {
+              const bookmarks: Bookmark[] = await bookmarksRes.json()
+              // Look for the auto-saved "last read" bookmark first
+              const lastReadBookmark = bookmarks.find(b => b.title === "__LAST_READ__")
+              
+              if (lastReadBookmark) {
+                // Use saved progress percentage if available, otherwise calculate
+                const progress = lastReadBookmark.progressPercentage !== null && lastReadBookmark.progressPercentage !== undefined
+                  ? Math.round(lastReadBookmark.progressPercentage)
+                  : calculateProgress(lastReadBookmark, latestBook.type)
+                setBookProgress({ [latestBook.id]: progress })
+              } else if (bookmarks.length > 0) {
+                // Fallback to most recent bookmark
+                const latestBookmark = bookmarks[0]
+                const progress = calculateProgress(latestBookmark, latestBook.type)
+                setBookProgress({ [latestBook.id]: progress })
+              } else {
+                setBookProgress({ [latestBook.id]: 0 })
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching bookmarks:", error)
+            setBookProgress({ [latestBook.id]: 0 })
+          }
+        }
       }
 
       if (wishlistRes.ok) {
@@ -101,6 +158,39 @@ export default function HomePage() {
     }))
   }
 
+  // Calculate progress from bookmark
+  const calculateProgress = (bookmark: Bookmark, bookType: string): number => {
+    if (!bookmark) return 0
+    
+    // For EPUB books, estimate progress from epubLocation
+    if (bookType === "epub" && bookmark.epubLocation) {
+      const cfi = bookmark.epubLocation
+      const segments = cfi.split('/').length
+      // More segments = further in book (rough estimate)
+      const estimatedProgress = Math.min(80, Math.max(10, segments * 5))
+      return estimatedProgress
+    }
+    
+    // For PDF books, use pageNumber if available
+    if (bookType === "pdf" && bookmark.pageNumber) {
+      return bookmark.pageNumber > 50 ? Math.min(80, (bookmark.pageNumber / 100) * 100) : 20
+    }
+    
+    // For text books, use position if available
+    if (bookType === "text" && bookmark.position) {
+      return bookmark.position > 1000 ? Math.min(80, (bookmark.position / 5000) * 100) : 20
+    }
+    
+    // If bookmark exists but no specific location data, assume minimal progress
+    return 10
+  }
+
+  // Get progress for current book
+  const getCurrentBookProgress = (): number => {
+    if (!currentBook) return 0
+    return bookProgress[currentBook.id] || 0
+  }
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto page-transition">
@@ -116,395 +206,294 @@ export default function HomePage() {
 
   return (
     <div className="max-w-7xl mx-auto page-transition">
-      {/* Hero Section */}
-      <div className="mb-12 lg:mb-16 fade-in">
-        <div className="inline-block mb-4">
-          <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
-            Welcome Back
-          </span>
-        </div>
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">
-          Your Reading Journey
-        </h1>
-        <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
-          Every word you learn brings you closer to fluency. Track your progress, review vocabulary, and discover new stories—all in one thoughtfully designed space.
-        </p>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 fade-in-delay">
-        <div className="group rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-5 border border-primary/10 hover:border-primary/20 transition-all duration-300 hover:shadow-soft interactive-scale">
-          <div className="text-2xl md:text-3xl font-bold mb-1.5 text-foreground">{books.length || 0}</div>
-          <div className="text-xs md:text-sm text-muted-foreground font-medium">Books</div>
-          <div className="mt-2 h-1 bg-primary/20 rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${Math.min((books.length / 10) * 100, 100)}%` }}></div>
-          </div>
-        </div>
-        <div className="group rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 p-5 border border-blue-500/10 hover:border-blue-500/20 transition-all duration-300 hover:shadow-soft interactive-scale">
-          <div className="text-2xl md:text-3xl font-bold mb-1.5 text-foreground">{wishlistItems.length || 0}</div>
-          <div className="text-xs md:text-sm text-muted-foreground font-medium">Wishlist</div>
-          <div className="mt-2 h-1 bg-blue-500/20 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${Math.min((wishlistItems.length / 20) * 100, 100)}%` }}></div>
-          </div>
-        </div>
-        <div className="group rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 p-5 border border-purple-500/10 hover:border-purple-500/20 transition-all duration-300 hover:shadow-soft interactive-scale">
-          <div className="text-2xl md:text-3xl font-bold mb-1.5 text-foreground">{vocabularyItems.length || 0}</div>
-          <div className="text-xs md:text-sm text-muted-foreground font-medium">Words</div>
-          <div className="mt-2 h-1 bg-purple-500/20 rounded-full overflow-hidden">
-            <div className="h-full bg-purple-500 rounded-full transition-all duration-500" style={{ width: `${Math.min((vocabularyItems.length / 100) * 100, 100)}%` }}></div>
-          </div>
-        </div>
-        <div className="group rounded-xl bg-gradient-to-br from-orange-500/5 to-orange-500/10 p-5 border border-orange-500/10 hover:border-orange-500/20 transition-all duration-300 hover:shadow-soft interactive-scale">
-          <div className="text-2xl md:text-3xl font-bold mb-1.5 text-foreground">{flashcards.length || 0}</div>
-          <div className="text-xs md:text-sm text-muted-foreground font-medium">Due</div>
-          <div className="mt-2 h-1 bg-orange-500/20 rounded-full overflow-hidden">
-            <div className="h-full bg-orange-500 rounded-full transition-all duration-500" style={{ width: `${flashcards.length > 0 ? '100%' : '0%'}` }}></div>
-          </div>
+      {/* Header Section - Personal Greeting */}
+      <div className="relative mb-8 lg:mb-12">
+        {/* Subtle mesh gradient from top-right */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-amber/10 via-violet/5 to-transparent rounded-full blur-3xl pointer-events-none opacity-50" />
+        
+        {/* Greeting Content - Aligned with Current Book card */}
+        <div className="relative z-10">
+          <h1 className="text-[2.75rem] sm:text-[3.5rem] md:text-[4.5rem] lg:text-[5.5rem] font-serif font-bold mb-2 md:mb-3 tracking-tight">
+            {getGreeting()}, {userName}.
+          </h1>
+          {currentBook ? (
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground font-sans">
+              Time to dive back into the flow.
+            </p>
+          ) : (
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground font-sans">
+              Ready to start your next reading journey?
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-        {/* Current Book Widget */}
-        <Card className="group relative overflow-hidden border-0 shadow-elevated hover:shadow-elevated hover-lift bg-gradient-to-br from-card to-card/95">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-          <CardHeader className="pb-5 relative">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 p-2.5 shadow-soft">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                </div>
-                <CardTitle className="text-xl font-bold">Current Book</CardTitle>
-              </div>
-              {currentBook && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleExpanded("book")}
-                  className="h-9 w-9 p-0 rounded-lg hover:bg-primary/10"
-                >
-                  {expanded.book ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 relative">
-            {currentBook ? (
-              <>
-                <div className="space-y-2">
-                  <h3 className="font-bold text-lg line-clamp-2 leading-tight">{currentBook.title}</h3>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                    <span>
-                      {new Date(currentBook.createdAt).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric', 
-                        year: 'numeric' 
-                      })}
-                    </span>
+      {/* Bento Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-4 md:gap-6 mb-6 md:mb-8 items-stretch">
+        {/* Current Book Hero Card - 60% width */}
+        <div className="lg:col-span-6 flex">
+          {currentBook ? (
+            <div className="bento-card glass-card p-6 md:p-8 relative group w-full">
+              <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+                {/* Book Cover Placeholder */}
+                <div className="flex-shrink-0">
+                  <div className="w-24 h-32 md:w-32 md:h-40 rounded-lg bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center shadow-lg">
+                    <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-amber/60" />
                   </div>
                 </div>
-                {expanded.book && (
-                  <div className="mt-6 pt-5 border-t border-border/50">
-                    <Link href={`/reader/${currentBook.id}`}>
-                      <Button className="w-full font-semibold shadow-soft" size="default">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Continue Reading
-                      </Button>
-                    </Link>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 mb-5 pulse-subtle">
-                  <BookOpen className="h-10 w-10 text-primary/60" />
-                </div>
-                <p className="text-lg font-semibold mb-2">Your library awaits</p>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                  Every great reading journey begins with a single book. Add your first one to get started.
-                </p>
-                <Link href="/library">
-                  <Button size="default" className="font-medium shadow-soft hover:shadow-elevated transition-all">
-                    Add Your First Book
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Wishlist Widget */}
-        <Card className="group relative overflow-hidden border-0 shadow-elevated hover:shadow-elevated hover-lift bg-gradient-to-br from-card to-card/95">
-          <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-          <CardHeader className="pb-5 relative">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-gradient-to-br from-pink-500/20 to-pink-500/10 p-2.5 shadow-soft">
-                  <Heart className="h-5 w-5 text-pink-600 dark:text-pink-400" />
-                </div>
-                <CardTitle className="text-xl font-bold">Wishlist</CardTitle>
-              </div>
-              {wishlistItems.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleExpanded("wishlist")}
-                  className="h-9 w-9 p-0 rounded-lg hover:bg-pink-500/10"
-                >
-                  {expanded.wishlist ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 relative">
-            {wishlistItems.length > 0 ? (
-              <>
-                <div className="space-y-3">
-                  {wishlistItems.slice(0, expanded.wishlist ? 10 : 3).map((item) => (
-                    <div key={item.id} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50">
-                      <p className="font-semibold text-sm line-clamp-1 leading-snug">{item.title}</p>
-                      {item.author && (
-                        <p className="text-xs text-muted-foreground mt-1">{item.author}</p>
-                      )}
+                
+                {/* Book Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold mb-2 line-clamp-2">{currentBook.title}</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 md:mb-4">Author Name</p>
+                  
+                  {/* Progress Bar */}
+                  <div className="mb-4 md:mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">Progress</span>
+                      <span className="text-[10px] sm:text-xs font-medium text-foreground">
+                        {getCurrentBookProgress()}%
+                      </span>
                     </div>
-                  ))}
-                </div>
-                {expanded.wishlist && (
-                  <div className="mt-6 pt-5 border-t border-border/50">
-                    <Link href="/wishlist">
-                      <Button variant="outline" className="w-full font-medium" size="default">
-                        View All
-                      </Button>
-                    </Link>
+                    <div className="h-1 bg-muted rounded-full overflow-hidden">
+                      <div className="glow-progress" style={{ width: `${getCurrentBookProgress()}%` }}></div>
+                    </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-pink-500/10 to-pink-500/5 mb-5 pulse-subtle">
-                  <Heart className="h-10 w-10 text-pink-600/60 dark:text-pink-400/60" />
+                  
+                  {/* Resume Button */}
+                  <Link href={`/reader/${currentBook.id}`}>
+                    <Button className="w-full sm:w-auto px-6 md:px-8 py-4 md:py-6 rounded-full text-sm md:text-base font-semibold bg-gradient-to-r from-amber to-violet hover:from-amber/90 hover:to-violet/90 transition-all shadow-lg hover:shadow-xl">
+                      Resume Reading
+                    </Button>
+                  </Link>
                 </div>
-                <p className="text-lg font-semibold mb-2">Build your reading wishlist</p>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                  Save books you're curious about. Your future self will thank you.
-                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bento-card glass-card p-8 md:p-12 text-center">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-amber/20 to-violet/20 mb-5">
+                <BookOpen className="h-10 w-10 text-amber/60" />
+              </div>
+              <p className="text-xl font-serif font-semibold mb-2">Your library awaits</p>
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+                Every great reading journey begins with a single book.
+              </p>
+              <Link href="/library">
+                <Button className="font-medium">Add Your First Book</Button>
+              </Link>
+            </div>
+          )}
+        </div>
+        
+        {/* Stats Bento Cards - 40% width (3 cards stacked to match Hero height) */}
+        <div className="lg:col-span-4 flex flex-col gap-2 md:gap-4 h-full">
+          {/* Books Stat */}
+          <div className="bento-card p-4 md:p-6 flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform duration-300 flex-1">
+            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{books.length || 0}</div>
+            <div className="text-[10px] md:text-xs text-muted-foreground font-medium">Books</div>
+          </div>
+          
+          {/* Words Stat */}
+          <div className="bento-card p-4 md:p-6 flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform duration-300 relative overflow-hidden flex-1">
+            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{vocabularyItems.length || 0}</div>
+            <div className="text-[10px] md:text-xs text-muted-foreground font-medium">Words</div>
+            {/* Animated graph line on hover */}
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-violet/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <svg className="w-full h-full" viewBox="0 0 100 10" preserveAspectRatio="none">
+                <path d="M0,8 Q25,2 50,5 T100,3" stroke="currentColor" strokeWidth="1" fill="none" className="text-violet" />
+              </svg>
+            </div>
+          </div>
+          
+          {/* Due Stat */}
+          <div className="bento-card p-4 md:p-6 flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform duration-300 flex-1">
+            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{flashcards.length || 0}</div>
+            <div className="text-[10px] md:text-xs text-muted-foreground font-medium">Due</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 lg:gap-8 items-stretch">
+
+        {/* Wishlist Widget - Book Spines */}
+        <div className="bento-card p-6 flex flex-col h-full">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-lg bg-pink-500/20 p-2">
+              <Heart className="h-5 w-5 text-pink-500" />
+            </div>
+            <h3 className="text-lg font-serif font-semibold">Wishlist</h3>
+          </div>
+          {wishlistItems.length > 0 ? (
+            <>
+              <div className="flex gap-2 items-end h-32 overflow-x-auto pb-2 flex-1">
+                {wishlistItems.slice(0, 5).map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="flex-shrink-0 book-spine group cursor-pointer"
+                    style={{
+                      width: '24px',
+                      height: `${80 + index * 8}px`,
+                      background: `linear-gradient(135deg, hsl(${240 + index * 20}, 70%, ${50 + index * 5}%), hsl(${260 + index * 20}, 60%, ${45 + index * 5}%))`,
+                      borderRadius: '2px 2px 0 0',
+                      boxShadow: 'inset -2px 0 4px rgba(0,0,0,0.3)',
+                      transition: 'all 0.3s ease',
+                      transform: 'translateY(0)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px) scale(1.05)'
+                      e.currentTarget.style.zIndex = '10'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                      e.currentTarget.style.zIndex = '1'
+                    }}
+                  >
+                    <div className="absolute bottom-0 left-0 right-0 p-1 text-[8px] font-bold text-white/80 rotate-90 origin-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                      {item.title}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-border/50">
                 <Link href="/wishlist">
-                  <Button variant="outline" size="default" className="font-medium">
-                    Explore Books
+                  <Button variant="ghost" size="sm" className="w-full text-xs">
+                    View All →
                   </Button>
                 </Link>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Vocabulary Widget */}
-        <Card className="hover:shadow-lg transition-all duration-200 border-border/50">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <BookMarked className="h-5 w-5 text-primary" />
-                </div>
-                <CardTitle className="text-lg font-semibold">Recent Words</CardTitle>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+              <div className="w-24 h-32 rounded-lg bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center mb-4 shadow-lg">
+                <BookOpen className="h-12 w-12 text-amber/60" />
               </div>
-              {vocabularyItems.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleExpanded("vocabulary")}
-                  className="h-8 w-8 p-0"
-                >
-                  {expanded.vocabulary ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
+              <p className="font-serif font-semibold mb-1">Thinking, Fast and Slow</p>
+              <p className="text-xs text-muted-foreground mb-4">By Daniel Kahneman</p>
+              <Link href="/wishlist">
+                <Button size="sm" className="font-medium">
+                  Add to List
                 </Button>
-              )}
+              </Link>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {vocabularyItems.length > 0 ? (
-              <>
-                <div className="space-y-3">
-                  {vocabularyItems.slice(0, expanded.vocabulary ? 10 : 3).map((item) => (
-                    <div key={item.id} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{item.term}</span>
-                        <span className="text-muted-foreground/60">→</span>
-                        <span className="text-sm text-muted-foreground">{item.translation}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {expanded.vocabulary && (
-                  <div className="mt-6 pt-5 border-t border-border/50">
-                    <Link href="/vocab">
-                      <Button variant="outline" className="w-full font-medium" size="default">
-                        View All Vocabulary
-                      </Button>
-                    </Link>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/5 mb-5 pulse-subtle">
-                  <BookMarked className="h-10 w-10 text-purple-600/60 dark:text-purple-400/60" />
-                </div>
-                <p className="text-lg font-semibold mb-2">Your vocabulary journey begins</p>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                  As you read, save words that catch your attention. Each one is a step toward fluency.
-                </p>
-                <Link href="/library">
-                  <Button variant="outline" size="default" className="font-medium">
-                    Start Reading
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          )}
+        </div>
 
-        {/* Review Widget */}
-        <Card className="group relative overflow-hidden border-0 shadow-elevated hover:shadow-elevated hover-lift bg-gradient-to-br from-card to-card/95">
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-          <CardHeader className="pb-5 relative">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-500/10 p-2.5 shadow-soft">
-                  <RotateCcw className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <CardTitle className="text-xl font-bold">Review</CardTitle>
+        {/* Recent Words Widget - Flashcard Strip */}
+        <div className="bento-card p-6 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-violet/20 p-2">
+                <BookMarked className="h-5 w-5 text-violet" />
               </div>
-              {flashcards.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleExpanded("review")}
-                  className="h-9 w-9 p-0 rounded-lg hover:bg-orange-500/10"
-                >
-                  {expanded.review ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
+              <h3 className="text-lg font-serif font-semibold">Recent Words</h3>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4 relative">
-            {flashcards.length > 0 ? (
-              <>
-                <div className="space-y-3">
-                  {flashcards.slice(0, expanded.review ? 10 : 3).map((card) => (
-                    <div key={card.flashcard.id} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50">
-                      <p className="font-semibold text-sm leading-snug mb-1">{card.vocabulary.term}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Due: {new Date(card.flashcard.dueAt).toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                {expanded.review && (
-                  <div className="mt-6 pt-5 border-t border-border/50">
-                    <Link href="/review">
-                      <Button className="w-full font-semibold shadow-soft" size="default">
-                        Start Review Session
-                      </Button>
-                    </Link>
+            {vocabularyItems.length > 0 && (
+              <Link href="/review">
+                <Button variant="ghost" size="sm" className="text-xs">
+                  Review →
+                </Button>
+              </Link>
+            )}
+          </div>
+          {vocabularyItems.length > 0 ? (
+            <>
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                {vocabularyItems.slice(0, 3).map((item) => (
+                  <div
+                    key={item.id}
+                    className="bento-card p-4 bg-muted/30 hover:bg-muted/50 transition-colors border border-border/30"
+                  >
+                    <p className="font-bold text-sm mb-2 text-foreground">{item.term}</p>
+                    <p className="text-xs text-muted-foreground italic line-clamp-2">
+                      {item.context || item.translation}
+                    </p>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500/10 to-orange-500/5 mb-5">
-                  <RotateCcw className="h-10 w-10 text-orange-600/60 dark:text-orange-400/60" />
-                </div>
-                <p className="text-lg font-semibold mb-2">All caught up!</p>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                  You're doing great. Keep reading and adding words to continue your learning journey.
-                </p>
+                ))}
+              </div>
+              <div className="pt-4 border-t border-border/50">
                 <Link href="/vocab">
-                  <Button variant="outline" size="default" className="font-medium">
-                    View Vocabulary
+                  <Button variant="ghost" size="sm" className="w-full text-xs">
+                    View All Vocabulary →
                   </Button>
                 </Link>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+              <p className="text-sm text-muted-foreground mb-4">No words saved yet</p>
+              <Link href="/library">
+                <Button variant="outline" size="sm" className="font-medium">
+                  Start Reading
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-12 lg:mt-16 fade-in-delay">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold tracking-tight">Quick Actions</h2>
-          <p className="text-sm text-muted-foreground hidden md:block">Navigate with ease</p>
+      <div className="mt-8 md:mt-12 lg:mt-16">
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <h2 className="text-xl md:text-2xl font-serif font-bold tracking-tight">Quick Actions</h2>
+          <p className="text-xs md:text-sm text-muted-foreground hidden md:block">Navigate with ease</p>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
           <Link href="/library" className="group">
-            <Card className="relative overflow-hidden border-0 shadow-soft hover:shadow-elevated hover-lift cursor-pointer bg-gradient-to-br from-primary/5 to-primary/10 transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <CardContent className="p-6 text-center relative">
-                <div className="rounded-xl bg-primary/20 p-3.5 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-soft">
-                  <BookOpen className="h-6 w-6 text-primary" />
-                </div>
-                <p className="text-sm font-semibold">Library</p>
-                <p className="text-xs text-muted-foreground mt-1">Your books</p>
-              </CardContent>
-            </Card>
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <div className="rounded-xl bg-primary/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
+                <BookOpen className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+              </div>
+              <p className="text-xs md:text-sm font-semibold">Library</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your books</p>
+            </div>
           </Link>
           <Link href="/suggested" className="group">
-            <Card className="relative overflow-hidden border-0 shadow-soft hover:shadow-elevated hover-lift cursor-pointer bg-gradient-to-br from-blue-500/5 to-blue-500/10 transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <CardContent className="p-6 text-center relative">
-                <div className="rounded-xl bg-blue-500/20 p-3.5 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-soft">
-                  <Sparkles className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                </div>
-                <p className="text-sm font-semibold">Suggested</p>
-                <p className="text-xs text-muted-foreground mt-1">Discover</p>
-              </CardContent>
-            </Card>
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <div className="rounded-xl bg-blue-500/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Sparkles className="h-5 w-5 md:h-6 md:w-6 text-blue-500" />
+              </div>
+              <p className="text-xs md:text-sm font-semibold">Suggested</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Discover</p>
+            </div>
           </Link>
           <Link href="/vocab" className="group">
-            <Card className="relative overflow-hidden border-0 shadow-soft hover:shadow-elevated hover-lift cursor-pointer bg-gradient-to-br from-purple-500/5 to-purple-500/10 transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <CardContent className="p-6 text-center relative">
-                <div className="rounded-xl bg-purple-500/20 p-3.5 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-soft">
-                  <BookMarked className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                </div>
-                <p className="text-sm font-semibold">Vocabulary</p>
-                <p className="text-xs text-muted-foreground mt-1">Your words</p>
-              </CardContent>
-            </Card>
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <div className="rounded-xl bg-violet/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
+                <BookMarked className="h-5 w-5 md:h-6 md:w-6 text-violet" />
+              </div>
+              <p className="text-xs md:text-sm font-semibold">Vocabulary</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your words</p>
+            </div>
           </Link>
           <Link href="/review" className="group">
-            <Card className="relative overflow-hidden border-0 shadow-soft hover:shadow-elevated hover-lift cursor-pointer bg-gradient-to-br from-orange-500/5 to-orange-500/10 transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <CardContent className="p-6 text-center relative">
-                <div className="rounded-xl bg-orange-500/20 p-3.5 w-fit mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-soft">
-                  <RotateCcw className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-                </div>
-                <p className="text-sm font-semibold">Review</p>
-                <p className="text-xs text-muted-foreground mt-1">Practice</p>
-              </CardContent>
-            </Card>
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <div className="rounded-xl bg-orange-500/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
+                <RotateCcw className="h-5 w-5 md:h-6 md:w-6 text-orange-500" />
+              </div>
+              <p className="text-xs md:text-sm font-semibold">Review</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Practice</p>
+            </div>
           </Link>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="mt-16 md:mt-20 lg:mt-24 py-6 border-t border-border/40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+            <div>© 2026 Lexis Inc.</div>
+            <div className="flex items-center gap-4">
+              <Link href="#" className="hover:text-foreground transition-colors">Privacy</Link>
+              <span>•</span>
+              <Link href="#" className="hover:text-foreground transition-colors">Terms</Link>
+              <span>•</span>
+              <Link href="#" className="hover:text-foreground transition-colors">Support</Link>
+            </div>
+            <div>Made with ♥ for readers</div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

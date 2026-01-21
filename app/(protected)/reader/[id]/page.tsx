@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useMemo } from "react"
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -216,6 +216,101 @@ export default function ReaderPage() {
   const [vocabularyWords, setVocabularyWords] = useState<Set<string>>(new Set()) // Words saved to vocabulary (not marked as known)
   const [hasKnownWordsData, setHasKnownWordsData] = useState(false)
   const router = useRouter()
+  
+  // Auto-save progress refs
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSavedLocationRef = useRef<string | number | null>(null)
+
+  // Auto-save reading progress function
+  const autoSaveProgress = useCallback(async (loc: string | number, progress: number) => {
+    // Don't save if location hasn't changed significantly
+    if (lastSavedLocationRef.current === loc) {
+      return
+    }
+
+    // Safety checks
+    if (!book?.id || !loc) return
+    if (progress <= 0 || progress > 100) return // Invalid progress
+
+    try {
+      const bookmarkData: any = {
+        bookId: book.id,
+        progressPercentage: Math.round(progress), // Round to integer
+      }
+
+      if (book.type === "epub" && typeof loc === "string" && loc.length > 0) {
+        bookmarkData.epubLocation = loc
+        if (currentPage !== null && currentPage > 0) {
+          bookmarkData.pageNumber = currentPage
+        }
+      } else if (book.type === "pdf" && currentPage && currentPage > 0) {
+        bookmarkData.pageNumber = currentPage
+      } else if (book.type === "text" && typeof loc === "number" && loc > 0) {
+        bookmarkData.position = loc
+      }
+
+      // Only save if we have at least one location identifier
+      if (!bookmarkData.epubLocation && !bookmarkData.pageNumber && !bookmarkData.position) {
+        return
+      }
+
+      const res = await fetch("/api/bookmarks/last-read", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bookmarkData),
+      })
+
+      if (res.ok) {
+        lastSavedLocationRef.current = loc
+        // Silently save - no toast notification for auto-save
+      }
+    } catch (error) {
+      // Silently fail - don't interrupt reading experience
+      console.debug("Auto-save progress error:", error)
+    }
+  }, [book, currentPage])
+
+  // Auto-save for PDF and text books when page changes
+  useEffect(() => {
+    if (book && (book.type === "pdf" || book.type === "text") && currentPage !== null) {
+      // Clear any pending auto-save
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+      
+      // Estimate progress for PDF/text (we don't have total pages, so estimate)
+      const estimatedProgress = currentPage > 50 ? Math.min(80, (currentPage / 100) * 100) : Math.max(5, currentPage * 2)
+      
+      // Debounce auto-save
+      autoSaveTimerRef.current = setTimeout(() => {
+        autoSaveProgress(currentPage, estimatedProgress)
+      }, 3000)
+    }
+    
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [book, currentPage])
+
+  // Save progress on unmount
+  useEffect(() => {
+    return () => {
+      // Clear any pending auto-save
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+      
+      // Save current progress on unmount
+      if (book && currentLocation !== null && readingProgress > 0) {
+        autoSaveProgress(currentLocation, readingProgress)
+      } else if (book && (book.type === "pdf" || book.type === "text") && currentPage !== null) {
+        const estimatedProgress = currentPage > 50 ? Math.min(80, (currentPage / 100) * 100) : Math.max(5, currentPage * 2)
+        autoSaveProgress(currentPage, estimatedProgress)
+      }
+    }
+  }, [book, currentLocation, readingProgress, currentPage])
 
   // Detect mobile screen size
   useEffect(() => {
@@ -1298,26 +1393,54 @@ export default function ReaderPage() {
                   // Calculate progress and chapter
                   if (bookRef.current && renditionRef.current) {
                     try {
+                      // Check if locations exist and are usable
                       const locations = bookRef.current.locations
                       let percentage = 0
                       
+                      // Only calculate if locations exist and have been generated
                       if (locations && typeof loc === 'string') {
-                        const cfi = loc
-                        percentage = locations.percentageFromCfi(cfi) || 0
-                        if (locations.total !== null) {
-                          const page = Math.ceil((percentage / 100) * locations.total)
-                          setCurrentPage(page)
+                        try {
+                          // Check if locations have been generated (length > 0 or total exists)
+                          const hasLocations = locations.length && locations.length() > 0
+                          const hasTotal = locations.total !== null && locations.total !== undefined
+                          
+                          if (hasLocations || hasTotal) {
+                            const cfi = loc
+                            percentage = locations.percentageFromCfi(cfi) || 0
+                            if (locations.total !== null && locations.total > 0) {
+                              const page = Math.ceil((percentage / 100) * locations.total)
+                              setCurrentPage(page)
+                            }
+                          }
+                        } catch (e) {
+                          // Locations might not be fully ready yet - this is normal during initial load
+                          console.debug("Locations not ready yet:", e)
                         }
                       } else if (typeof loc === 'number') {
                         percentage = loc
-                        const total = bookRef.current.locations?.total
-                        if (total) {
+                        // Only access total if locations exist and have total
+                        if (locations && locations.total !== null && locations.total !== undefined && locations.total > 0) {
+                          const total = locations.total
                           const page = Math.ceil((loc / 100) * total)
                           setCurrentPage(page)
                         }
                       }
                       
-                      setReadingProgress(percentage)
+                      // Only set progress if we got a valid percentage
+                      if (percentage > 0) {
+                        setReadingProgress(percentage)
+                        
+                        // Auto-save progress (debounced - every 3 seconds)
+                        if (autoSaveTimerRef.current) {
+                          clearTimeout(autoSaveTimerRef.current)
+                        }
+                        
+                        autoSaveTimerRef.current = setTimeout(() => {
+                          if (book && percentage > 0) {
+                            autoSaveProgress(loc, percentage)
+                          }
+                        }, 3000) // Save every 3 seconds after user stops reading
+                      }
                       
                       // Find current chapter from TOC
                       if (toc.length > 0 && typeof loc === 'string') {
@@ -1344,18 +1467,35 @@ export default function ReaderPage() {
                       }
                     } catch (e) {
                       // If page calculation fails, try to get from rendition
+                      // Only if locations are ready
                       try {
-                        const currentLoc = renditionRef.current.currentLocation()
-                        if (currentLoc && currentLoc.start && bookRef.current.locations) {
-                          const percentage = bookRef.current.locations.percentageFromCfi(currentLoc.start.cfi) || 0
-                          setReadingProgress(percentage)
-                          if (percentage !== null && bookRef.current.locations.total) {
-                            const page = Math.ceil((percentage / 100) * bookRef.current.locations.total)
-                            setCurrentPage(page)
+                        if (!bookRef.current?.locations) {
+                          return // Locations not available yet
+                        }
+                        
+                        // Check if locations have been generated
+                        const locations = bookRef.current.locations
+                        const hasLocations = locations.length && typeof locations.length === 'function' && locations.length() > 0
+                        const hasTotal = locations.total !== null && locations.total !== undefined
+                        
+                        if (!hasLocations && !hasTotal) {
+                          return // Locations not generated yet
+                        }
+                        
+                        const currentLoc = renditionRef.current?.currentLocation()
+                        if (currentLoc && currentLoc.start && locations) {
+                          const percentage = locations.percentageFromCfi(currentLoc.start.cfi) || 0
+                          if (percentage > 0) {
+                            setReadingProgress(percentage)
+                            if (locations.total && locations.total > 0) {
+                              const page = Math.ceil((percentage / 100) * locations.total)
+                              setCurrentPage(page)
+                            }
                           }
                         }
                       } catch (err) {
-                        console.error("Error calculating progress:", err)
+                        // Silently ignore - locations might not be ready yet
+                        console.debug("Error calculating progress (locations not ready):", err)
                       }
                     }
                   }
@@ -1369,25 +1509,56 @@ export default function ReaderPage() {
                   }
                   
                   // Generate locations if not already generated
-                  try {
-                    const bookObj = book || rend.book
-                    if (bookObj && bookObj.locations) {
+                  // Wait a bit for the book to be fully opened
+                  setTimeout(async () => {
+                    try {
+                      const bookObj = book || rend.book
+                      if (!bookObj || !bookObj.locations) {
+                        return
+                      }
+                      
+                      // Check if book is opened and has spine
+                      if (!bookObj.spine || !bookObj.spine.spineItems || bookObj.spine.spineItems.length === 0) {
+                        console.debug("Book spine not ready yet")
+                        return
+                      }
+                      
                       // Check if locations are already generated
                       const locationsKey = `epub_locations_${bookId}`
                       const cachedLocations = localStorage.getItem(locationsKey)
                       
-                      if (!cachedLocations && bookObj.locations.length() === 0) {
-                        // Generate locations (600-1600 is a good range)
-                        console.log("Generating locations...")
-                        await bookObj.locations.generate(1000)
-                        // Cache the fact that locations are generated
-                        localStorage.setItem(locationsKey, "true")
-                        console.log("Locations generated:", bookObj.locations.length())
+                      // Check current length safely
+                      let currentLength = 0
+                      try {
+                        currentLength = bookObj.locations.length ? bookObj.locations.length() : 0
+                      } catch (e) {
+                        // Locations might not be initialized yet
+                        console.debug("Locations not initialized yet")
+                        return
                       }
+                      
+                      if (!cachedLocations && currentLength === 0) {
+                        // Generate locations (1000 is a good default)
+                        console.log("Generating locations...")
+                        try {
+                          await bookObj.locations.generate(1000)
+                          // Cache the fact that locations are generated
+                          localStorage.setItem(locationsKey, "true")
+                          console.log("Locations generated:", bookObj.locations.length())
+                        } catch (genError: any) {
+                          // Handle specific epubjs errors gracefully
+                          if (genError?.message?.includes("content") || genError?.message?.includes("undefined")) {
+                            console.warn("Some sections may not be loaded yet. Locations will be generated as you read.")
+                          } else {
+                            console.error("Error generating locations:", genError)
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      // Silently handle - locations generation is optional
+                      console.debug("Could not generate locations:", e)
                     }
-                  } catch (e) {
-                    console.error("Error generating locations:", e)
-                  }
+                  }, 1000) // Wait 1 second for book to fully open
                   
                   // Navigate to initial location if provided
                   if (initialLocation && rend) {
