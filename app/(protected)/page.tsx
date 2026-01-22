@@ -397,15 +397,15 @@ export default function HomePage() {
           </div>
           {vocabularyItems.length > 0 ? (
             <>
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                {vocabularyItems.slice(0, 3).map((item) => (
+              <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
+                {vocabularyItems.slice(0, 12).map((item) => (
                   <div
                     key={item.id}
-                    className="bento-card p-4 bg-muted/30 hover:bg-muted/50 transition-colors border border-border/30"
+                    className="recent-word-card group cursor-pointer hover:shadow-soft"
                   >
-                    <p className="font-bold text-sm mb-2 text-foreground">{item.term}</p>
-                    <p className="text-xs text-muted-foreground italic line-clamp-2">
-                      {item.context || item.translation}
+                    <p className="font-bold text-sm text-foreground mb-1 line-clamp-1">{item.term}</p>
+                    <p className="text-xs text-muted-foreground italic line-clamp-1">
+                      {item.translation}
                     </p>
                   </div>
                 ))}
@@ -440,36 +440,36 @@ export default function HomePage() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
           <Link href="/library" className="group">
-            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
-              <div className="rounded-xl bg-primary/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
-                <BookOpen className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
+              <div className="icon-container icon-premium bg-primary/10 text-primary mx-auto mb-3 md:mb-4 group-hover:bg-primary/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
+                <BookOpen className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-primary" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Library</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your books</p>
             </div>
           </Link>
           <Link href="/suggested" className="group">
-            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
-              <div className="rounded-xl bg-blue-500/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Sparkles className="h-5 w-5 md:h-6 md:w-6 text-blue-500" />
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
+              <div className="icon-container icon-premium bg-blue-500/10 text-blue-500 mx-auto mb-3 md:mb-4 group-hover:bg-blue-500/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
+                <Sparkles className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-blue" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Suggested</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Discover</p>
             </div>
           </Link>
           <Link href="/vocab" className="group">
-            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
-              <div className="rounded-xl bg-violet/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
-                <BookMarked className="h-5 w-5 md:h-6 md:w-6 text-violet" />
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
+              <div className="icon-container icon-premium bg-violet/10 text-violet mx-auto mb-3 md:mb-4 group-hover:bg-violet/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
+                <BookMarked className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-violet" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Vocabulary</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your words</p>
             </div>
           </Link>
           <Link href="/review" className="group">
-            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer">
-              <div className="rounded-xl bg-orange-500/20 p-3 md:p-3.5 w-fit mx-auto mb-3 md:mb-4 group-hover:scale-110 transition-transform duration-300">
-                <RotateCcw className="h-5 w-5 md:h-6 md:w-6 text-orange-500" />
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
+              <div className="icon-container icon-premium bg-orange-500/10 text-orange-500 mx-auto mb-3 md:mb-4 group-hover:bg-orange-500/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
+                <RotateCcw className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-orange" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Review</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Practice</p>

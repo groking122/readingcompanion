@@ -181,7 +181,7 @@ export default function SuggestedBooksPage() {
         </Select>
       </div>
 
-      {/* Books Grid */}
+      {/* Books Display */}
       {books.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
@@ -215,77 +215,206 @@ export default function SuggestedBooksPage() {
         </Card>
       ) : (
         <>
-          <div className="mb-6 text-sm text-muted-foreground fade-in-delay">
-            Showing {books.length} {books.length === 1 ? "treasure" : "treasures"} waiting to be discovered
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
-            {books.map((book, index) => {
-              const bookKey = `${book.title}-${book.author}`
-              return (
-                <Card
-                  key={`${book.title}-${index}`}
-                  className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth"
-                  style={{
-                    borderLeftColor: getCategoryColor(book.category),
-                    animationDelay: `${index * 30}ms`,
-                  }}
-                >
-                  <CardHeader className="pb-4">
-                    <div className="flex items-start justify-between gap-2">
+          {/* Featured Book of the Day */}
+          {selectedCategory === "all" && !searchTerm && books.length > 0 && (
+            <div className="mb-12 fade-in-delay">
+              <h2 className="text-2xl md:text-3xl font-serif font-bold mb-6 tracking-tight">Featured Book of the Day</h2>
+              {(() => {
+                const featuredBook = books[0]
+                const bookKey = `${featuredBook.title}-${featuredBook.author}`
+                return (
+                  <div className="bento-card glass-card p-6 md:p-8 relative group w-full">
+                    <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+                      <div className="flex-shrink-0">
+                        <div className="w-24 h-32 md:w-32 md:h-40 rounded-lg bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center shadow-lg">
+                          <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-amber/60" />
+                        </div>
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors duration-300 font-semibold">
-                          {book.title}
-                        </CardTitle>
-                        <CardDescription className="text-sm">
-                          by {book.author}
-                        </CardDescription>
+                        <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold mb-2 line-clamp-2">{featuredBook.title}</h3>
+                        <p className="text-sm md:text-base text-muted-foreground mb-4">by {featuredBook.author}</p>
+                        <div className="mb-4">
+                          <span
+                            className="px-3 py-1.5 rounded-full text-sm font-medium inline-block"
+                            style={{
+                              backgroundColor: `${getCategoryColor(featuredBook.category)}20`,
+                              color: getCategoryColor(featuredBook.category),
+                            }}
+                          >
+                            {featuredBook.category}
+                          </span>
+                        </div>
+                        <div className="flex gap-3">
+                          {featuredBook.githubUrl && featuredBook.githubUrl.endsWith('.epub') ? (
+                            <Button
+                              className="font-medium shadow-soft hover:shadow-elevated transition-all"
+                              onClick={() => handleAddToLibrary(featuredBook)}
+                              disabled={addingToLibrary === bookKey}
+                            >
+                              <BookOpen className="h-4 w-4 mr-2" />
+                              {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB to Library"}
+                            </Button>
+                          ) : null}
+                          <Button
+                            className="font-medium transition-all hover:bg-accent/50"
+                            variant="outline"
+                            onClick={() => handleAddToWishlist(featuredBook)}
+                            disabled={addingToWishlist === bookKey}
+                          >
+                            <Heart className="h-4 w-4 mr-2" />
+                            {addingToWishlist === bookKey ? "Adding..." : "Add to Wishlist"}
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-3">
-                      <span
-                        className="px-2.5 py-1 rounded-full text-xs font-medium inline-block"
-                        style={{
-                          backgroundColor: `${getCategoryColor(book.category)}20`,
-                          color: getCategoryColor(book.category),
-                        }}
-                      >
-                        {book.category}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
-                      <Button
-                        className="w-full font-medium shadow-soft hover:shadow-elevated transition-all"
-                        onClick={() => handleAddToLibrary(book)}
-                        disabled={addingToLibrary === bookKey}
-                        data-book-key={bookKey}
-                        data-action="library"
-                      >
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB to Library"}
-                      </Button>
-                    ) : (
-                      <div className="text-xs text-muted-foreground text-center py-2 px-3 rounded-md bg-muted/30">
-                        EPUB not directly available
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Category-based Horizontal Scrolling Strips */}
+          {selectedCategory === "all" && !searchTerm ? (
+            <div className="space-y-8 fade-in-delay">
+              {(() => {
+                const booksByCategory = books.reduce((acc, book) => {
+                  if (!acc[book.category]) {
+                    acc[book.category] = []
+                  }
+                  acc[book.category].push(book)
+                  return acc
+                }, {} as Record<string, typeof books>)
+
+                return Object.entries(booksByCategory).map(([category, categoryBooks]) => (
+                  <div key={category}>
+                    <h2 className="text-xl md:text-2xl font-serif font-bold mb-4 tracking-tight">{category}</h2>
+                    <div className="overflow-x-auto pb-4 -mx-4 px-4">
+                      <div className="flex gap-4 min-w-max">
+                        {categoryBooks.map((book, index) => {
+                          const bookKey = `${book.title}-${book.author}`
+                          return (
+                            <Card
+                              key={`${book.title}-${index}`}
+                              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth flex-shrink-0 w-64 bento-card"
+                              style={{
+                                borderLeftColor: getCategoryColor(book.category),
+                              }}
+                            >
+                              <CardHeader className="pb-4">
+                                <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors duration-300 font-semibold">
+                                  {book.title}
+                                </CardTitle>
+                                <CardDescription className="text-sm">
+                                  by {book.author}
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
+                                  <Button
+                                    className="w-full font-medium shadow-soft hover:shadow-elevated transition-all text-xs"
+                                    onClick={() => handleAddToLibrary(book)}
+                                    disabled={addingToLibrary === bookKey}
+                                    size="sm"
+                                  >
+                                    <BookOpen className="h-3 w-3 mr-2" />
+                                    Add EPUB
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  className="w-full font-medium transition-all hover:bg-accent/50 text-xs"
+                                  variant="outline"
+                                  onClick={() => handleAddToWishlist(book)}
+                                  disabled={addingToWishlist === bookKey}
+                                  size="sm"
+                                >
+                                  <Heart className="h-3 w-3 mr-2" />
+                                  Wishlist
+                                </Button>
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
                       </div>
-                    )}
-                    <Button
-                      className="w-full font-medium transition-all hover:bg-accent/50"
-                      variant="outline"
-                      onClick={() => handleAddToWishlist(book)}
-                      disabled={addingToWishlist === bookKey}
-                      data-book-key={bookKey}
-                      data-action="wishlist"
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
+          ) : (
+            <>
+              <div className="mb-6 text-sm text-muted-foreground fade-in-delay">
+                Showing {books.length} {books.length === 1 ? "treasure" : "treasures"} waiting to be discovered
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
+                {books.map((book, index) => {
+                  const bookKey = `${book.title}-${book.author}`
+                  return (
+                    <Card
+                      key={`${book.title}-${index}`}
+                      className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth bento-card"
+                      style={{
+                        borderLeftColor: getCategoryColor(book.category),
+                        animationDelay: `${index * 30}ms`,
+                      }}
                     >
-                      <Heart className="h-4 w-4 mr-2" />
-                      {addingToWishlist === bookKey ? "Adding..." : "Add to Wishlist"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+                      <CardHeader className="pb-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors duration-300 font-semibold">
+                              {book.title}
+                            </CardTitle>
+                            <CardDescription className="text-sm">
+                              by {book.author}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          <span
+                            className="px-2.5 py-1 rounded-full text-xs font-medium inline-block"
+                            style={{
+                              backgroundColor: `${getCategoryColor(book.category)}20`,
+                              color: getCategoryColor(book.category),
+                            }}
+                          >
+                            {book.category}
+                          </span>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
+                          <Button
+                            className="w-full font-medium shadow-soft hover:shadow-elevated transition-all"
+                            onClick={() => handleAddToLibrary(book)}
+                            disabled={addingToLibrary === bookKey}
+                            data-book-key={bookKey}
+                            data-action="library"
+                          >
+                            <BookOpen className="h-4 w-4 mr-2" />
+                            {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB to Library"}
+                          </Button>
+                        ) : (
+                          <div className="text-xs text-muted-foreground text-center py-2 px-3 rounded-md bg-muted/30">
+                            EPUB not directly available
+                          </div>
+                        )}
+                        <Button
+                          className="w-full font-medium transition-all hover:bg-accent/50"
+                          variant="outline"
+                          onClick={() => handleAddToWishlist(book)}
+                          disabled={addingToWishlist === bookKey}
+                          data-book-key={bookKey}
+                          data-action="wishlist"
+                        >
+                          <Heart className="h-4 w-4 mr-2" />
+                          {addingToWishlist === bookKey ? "Adding..." : "Add to Wishlist"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

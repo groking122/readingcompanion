@@ -230,12 +230,14 @@ export default function ReviewPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto page-transition">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+            </div>
+            <p className="text-muted-foreground font-medium">Preparing your review session...</p>
           </div>
-          <p className="text-muted-foreground font-medium">Preparing your review session...</p>
         </div>
       </div>
     )
@@ -271,12 +273,14 @@ export default function ReviewPage() {
 
   if (!currentExercise) {
     return (
-      <div className="max-w-4xl mx-auto page-transition">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+            </div>
+            <p className="text-muted-foreground font-medium">Preparing your next exercise...</p>
           </div>
-          <p className="text-muted-foreground font-medium">Preparing your next exercise...</p>
         </div>
       </div>
     )
@@ -284,12 +288,14 @@ export default function ReviewPage() {
 
   if (updating) {
     return (
-      <div className="max-w-4xl mx-auto page-transition">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+            </div>
+            <p className="text-muted-foreground font-medium">Saving your progress...</p>
           </div>
-          <p className="text-muted-foreground font-medium">Saving your progress...</p>
         </div>
       </div>
     )
@@ -340,31 +346,33 @@ export default function ReviewPage() {
   const progressPercentage = ((currentIndex + 1) / flashcards.length) * 100
 
   return (
-    <div className="max-w-4xl mx-auto px-4 md:px-6 py-8 page-transition">
-      <div className="mb-8 fade-in">
-        <div className="text-center mb-6">
-          <div className="inline-block mb-4">
-            <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
-              Practice Session
-            </span>
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition overflow-y-auto">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6 py-8">
+        {/* Minimal Header */}
+        <div className="w-full max-w-2xl mb-6 fade-in">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm text-muted-foreground">
+              Exercise {currentIndex + 1} of {flashcards.length}
+            </div>
+            {/* Progress Bar */}
+            <div className="flex-1 mx-4 bg-muted/50 rounded-full h-1.5 overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {Math.round(progressPercentage)}%
+            </div>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">Review</h1>
-          <p className="text-muted-foreground text-lg mb-6">
-            Exercise {currentIndex + 1} of {flashcards.length}
-          </p>
         </div>
-        
-        {/* Progress Bar */}
-        <div className="w-full bg-muted/50 rounded-full h-2 mb-8 overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 rounded-full transition-all duration-500 ease-out shadow-soft"
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-      </div>
 
-      <div className="fade-in-delay">
-        {renderExercise()}
+        {/* Center Card */}
+        <div className="w-full max-w-2xl fade-in-delay">
+          <div className="bento-card p-6 md:p-8 shadow-elevated">
+            {renderExercise()}
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -356,6 +356,144 @@
       border-radius: 16px;
     }
   }
+  
+  /* Recent Words Compact Card */
+  .recent-word-card {
+    height: 80px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid hsl(var(--border) / 0.3);
+    background: hsl(var(--card));
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  
+  .recent-word-card:hover {
+    border-color: hsl(var(--border));
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Icon Container for Quick Actions */
+  .icon-container {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+  
+  @media (min-width: 768px) {
+    .icon-container {
+      width: 56px;
+      height: 56px;
+    }
+  }
+  
+  /* Premium Icon Styling */
+  .icon-premium {
+    position: relative;
+  }
+  
+  .icon-premium-subtle {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+  }
+  
+  .icon-premium-subtle:hover {
+    opacity: 1;
+  }
+  
+  /* Icon Gradient Classes - Using filter for stroke-based icons */
+  .icon-gradient-primary {
+    filter: drop-shadow(0 0 2px hsl(var(--primary) / 0.5));
+  }
+  
+  .icon-gradient-blue {
+    filter: drop-shadow(0 0 2px rgb(59, 130, 246) / 0.5);
+  }
+  
+  .icon-gradient-violet {
+    filter: drop-shadow(0 0 2px hsl(270, 80%, 65%) / 0.5);
+  }
+  
+  .icon-gradient-orange {
+    filter: drop-shadow(0 0 2px rgb(249, 115, 22) / 0.5);
+  }
+  
+  /* Enhanced glow on hover */
+  .group:hover .icon-gradient-primary {
+    filter: drop-shadow(0 0 4px hsl(var(--primary) / 0.7));
+  }
+  
+  .group:hover .icon-gradient-blue {
+    filter: drop-shadow(0 0 4px rgb(59, 130, 246) / 0.7);
+  }
+  
+  .group:hover .icon-gradient-violet {
+    filter: drop-shadow(0 0 4px hsl(270, 80%, 65%) / 0.7);
+  }
+  
+  .group:hover .icon-gradient-orange {
+    filter: drop-shadow(0 0 4px rgb(249, 115, 22) / 0.7);
+  }
+  
+  /* Icon Glow Effects */
+  .icon-glow {
+    filter: drop-shadow(0 0 6px currentColor);
+    transition: filter 0.3s ease;
+  }
+  
+  .group:hover .icon-glow {
+    filter: drop-shadow(0 0 10px currentColor);
+  }
+  
+  .icon-glow-active {
+    filter: drop-shadow(0 0 8px hsl(var(--primary) / 0.5));
+  }
+  
+  /* Icon Badge for Notifications */
+  .icon-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: hsl(var(--destructive));
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid hsl(var(--background));
+    z-index: 10;
+  }
+  
+  /* Icon Pulse Animation */
+  @keyframes icon-pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.05);
+      opacity: 0.9;
+    }
+  }
+  
+  .icon-pulse {
+    animation: icon-pulse 2s ease-in-out infinite;
+  }
+  
+  /* Search Bar Glow Effect */
+  input:focus {
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1), 0 0 20px -5px hsl(var(--primary) / 0.3);
+  }
 }
 
 /* PDF rendering improvements */

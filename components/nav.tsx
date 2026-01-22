@@ -13,6 +13,7 @@ const navItems = [
   { href: "/suggested", label: "Suggested", icon: Sparkles },
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/vocab", label: "Vocabulary", icon: BookMarked },
+  { href: "/review", label: "Review", icon: RotateCcw },
 ]
 
 export function Nav() {
@@ -65,7 +66,6 @@ export function Nav() {
           {/* Centered Navigation */}
           <div className="hidden items-center gap-1 md:flex absolute left-1/2 transform -translate-x-1/2">
             {navItems.map((item) => {
-              const Icon = item.icon
               const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href))
               return (
                 <Link

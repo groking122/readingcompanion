@@ -380,17 +380,17 @@ export default function VocabPage() {
       <div className="flex gap-4 mb-6">
         <div className="flex-1">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
               placeholder="Search terms or translations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-12 h-14 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 focus:shadow-glow transition-all"
             />
           </div>
         </div>
         <Select value={selectedBookId} onValueChange={setSelectedBookId}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-[200px] h-14 rounded-2xl">
             <SelectValue placeholder="Filter by book" />
           </SelectTrigger>
           <SelectContent>
@@ -453,7 +453,7 @@ export default function VocabPage() {
             return (
               <Card 
                 key={item.id} 
-                className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth"
+                className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth bento-card"
                 style={{ animationDelay: `${index * 30}ms` }}
               >
                 <CardHeader className="pb-3">

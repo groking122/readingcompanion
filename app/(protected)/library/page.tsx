@@ -267,33 +267,45 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      {/* Category Filter */}
-      <div className="flex flex-wrap gap-3 mb-8">
-        <Button
-          variant={selectedCategory === "all" ? "default" : "outline"}
-          size="default"
-          onClick={() => setSelectedCategory("all")}
-          className={selectedCategory === "all" ? "shadow-soft font-semibold" : "font-medium"}
-        >
-          All ({books.length})
-        </Button>
-        <Button
-          variant={selectedCategory === "book" ? "default" : "outline"}
-          size="default"
-          onClick={() => setSelectedCategory("book")}
-          className={selectedCategory === "book" ? "shadow-soft font-semibold" : "font-medium"}
-        >
-          Books ({books.filter(b => b.category === "book" || !b.category).length})
-        </Button>
-        <Button
-          variant={selectedCategory === "note" ? "default" : "outline"}
-          size="default"
-          onClick={() => setSelectedCategory("note")}
-          className={selectedCategory === "note" ? "shadow-soft font-semibold" : "font-medium"}
-        >
-          Notes ({books.filter(b => b.category === "note").length})
-        </Button>
-      </div>
+      {/* Sidebar + Content Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Sidebar Filters */}
+        <aside className="lg:col-span-1">
+          <div className="lg:sticky lg:top-8 space-y-4">
+            <div className="bento-card p-4">
+              <h3 className="text-sm font-semibold mb-3 text-foreground">Filters</h3>
+              <div className="space-y-2">
+                <Button
+                  variant={selectedCategory === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory("all")}
+                  className={`w-full justify-start ${selectedCategory === "all" ? "shadow-soft font-semibold" : "font-medium"}`}
+                >
+                  All ({books.length})
+                </Button>
+                <Button
+                  variant={selectedCategory === "book" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory("book")}
+                  className={`w-full justify-start ${selectedCategory === "book" ? "shadow-soft font-semibold" : "font-medium"}`}
+                >
+                  Books ({books.filter(b => b.category === "book" || !b.category).length})
+                </Button>
+                <Button
+                  variant={selectedCategory === "note" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory("note")}
+                  className={`w-full justify-start ${selectedCategory === "note" ? "shadow-soft font-semibold" : "font-medium"}`}
+                >
+                  Notes ({books.filter(b => b.category === "note").length})
+                </Button>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <div className="lg:col-span-3">
 
       {showForm && (
         <Card className="mb-8">
@@ -421,33 +433,28 @@ export default function LibraryPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 fade-in-delay">
           {filteredBooks.map((book, index) => (
             <Card 
               key={book.id} 
-              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth"
+              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth bento-card"
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              <CardHeader className="pb-4">
-                <CardTitle className="line-clamp-2 text-lg font-semibold group-hover:text-primary transition-colors duration-300">
+              {/* Book Cover Placeholder - Top 80% */}
+              <div className="aspect-[3/4] bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center mb-3 rounded-t-3xl">
+                <BookOpen className="h-16 w-16 text-amber/60" />
+              </div>
+              {/* Title and Progress - Bottom 20% */}
+              <CardHeader className="pb-3 pt-0">
+                <CardTitle className="line-clamp-2 text-base font-semibold group-hover:text-primary transition-colors duration-300 mb-2">
                   {book.title}
                 </CardTitle>
-                <CardDescription className="flex items-center gap-2 mt-2">
-                  <span className="text-xs">
-                    {new Date(book.createdAt).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric' 
-                    })}
-                  </span>
-                  {book.category === "note" && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                      Note
-                    </span>
-                  )}
-                </CardDescription>
+                {/* Progress Bar Placeholder */}
+                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                  <div className="glow-progress" style={{ width: '0%' }}></div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2 pt-0">
                 <Link href={`/reader/${book.id}`}>
                   <Button className="w-full font-medium shadow-soft hover:shadow-elevated transition-all">
                     Open {book.category === "note" ? "Note" : "Book"}
@@ -481,6 +488,8 @@ export default function LibraryPage() {
           ))}
         </div>
       )}
+        </div>
+      </div>
     </div>
   )
 }
