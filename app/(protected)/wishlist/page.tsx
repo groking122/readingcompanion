@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Plus, BookOpen, Trash2, Star, Edit2, Check, X, BookMarked } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/lib/toast"
+import { formatTitleCase } from "@/lib/utils"
+import { Footer } from "@/components/footer"
 
 interface WishlistItem {
   id: string
@@ -158,20 +160,20 @@ export default function WishlistPage() {
   })
 
   const getPriorityColor = (priority: number) => {
-    if (priority > 0) return "text-yellow-500"
+    if (priority > 0) return "text-[var(--c-spark)]"
     if (priority < 0) return "text-muted-foreground"
     return "text-foreground"
   }
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; color: string }> = {
-      want_to_read: { label: "Want to Read", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-      reading: { label: "Reading", color: "bg-green-500/10 text-green-600 dark:text-green-400" },
-      completed: { label: "Completed", color: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
+      want_to_read: { label: "Want to Read", color: "text-[var(--c-spark)] border-[var(--c-spark)]/50" },
+      reading: { label: "Reading", color: "text-[var(--c-strong)] border-[var(--c-strong)]/50" },
+      completed: { label: "Completed", color: "text-[var(--c-muted)] border-[var(--c-muted)]/50" },
     }
     const statusInfo = statusMap[status] || statusMap.want_to_read
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+      <span className={`px-2 py-1 rounded-full text-xs font-medium border bg-transparent ${statusInfo.color}`}>
         {statusInfo.label}
       </span>
     )
@@ -191,7 +193,7 @@ export default function WishlistPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-6 page-transition">
+    <div className="max-w-7xl mx-auto px-4 md:px-6 page-transition flex flex-col min-h-[calc(100vh-4rem-8rem)]">
       <div className="mb-10 lg:mb-12 fade-in">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
           <div>
@@ -200,7 +202,7 @@ export default function WishlistPage() {
                 Your Reading Goals
               </span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">My Wishlist</h1>
+            <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight font-serif">My Wishlist</h1>
             <p className="text-muted-foreground text-lg">
               {items.length === 0 ? (
                 "Start building your reading wishlist"
@@ -330,12 +332,12 @@ export default function WishlistPage() {
 
       {/* Wishlist Items */}
       {filteredItems.length === 0 ? (
-        <Card className="border-dashed">
+        <Card className="border border-border/50">
           <CardContent className="py-16 text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-pink-500/10 to-pink-500/5 mb-5 pulse-subtle">
-              <BookMarked className="h-10 w-10 text-pink-600/60 dark:text-pink-400/60" />
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--c-light)] mb-5 pulse-subtle">
+              <BookMarked className="h-10 w-10 text-[var(--c-soft)]" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">
+            <h3 className="text-xl font-semibold mb-2 font-serif">
               {items.length === 0
                 ? "Your wishlist is empty"
                 : "No books match your search"}
@@ -349,7 +351,7 @@ export default function WishlistPage() {
               <Button 
                 onClick={() => setShowForm(true)} 
                 size="default" 
-                className="font-medium shadow-soft hover:shadow-elevated transition-all"
+                className="font-medium shadow-soft hover:shadow-elevated transition-all bg-white text-black hover:bg-white/90"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Your First Book
@@ -362,47 +364,50 @@ export default function WishlistPage() {
           {filteredItems.map((item, index) => (
             <Card
               key={item.id}
-              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth"
-              style={{
-                borderLeftColor:
-                  item.priority > 0
-                    ? "rgb(234 179 8)"
-                    : item.priority < 0
-                    ? "rgb(156 163 175)"
-                    : "rgb(59 130 246)",
-                animationDelay: `${index * 30}ms`,
-              }}
+              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth bento-card flex flex-col"
+              style={{ animationDelay: `${index * 50}ms` }}
             >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg line-clamp-2 mb-1">
-                      {item.title}
-                    </CardTitle>
-                    {item.author && (
-                      <CardDescription className="text-sm">
-                        by {item.author}
-                      </CardDescription>
-                    )}
+              <CardHeader className="pb-4 pt-5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-md bg-[var(--c-light)] flex items-center justify-center">
+                      <BookMarked className="h-5 w-5 text-[var(--c-soft)]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="line-clamp-2 text-base font-semibold group-hover:text-primary transition-colors duration-300 mb-1">
+                        {formatTitleCase(item.title)}
+                      </CardTitle>
+                      {item.author && item.author !== "Unknown" ? (
+                        <p className="text-xs text-muted-foreground">
+                          by {item.author}
+                        </p>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-1">
+                          {getStatusBadge(item.status)}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     {item.priority > 0 && (
                       <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 mt-2">
-                  {getStatusBadge(item.status)}
-                </div>
+                {item.author && item.author !== "Unknown" && (
+                  <div className="flex items-center gap-2 mt-2">
+                    {getStatusBadge(item.status)}
+                  </div>
+                )}
               </CardHeader>
               {item.notes && (
-                <CardContent>
-                  <p className="text-sm text-muted-foreground line-clamp-3">
+                <CardContent className="pt-0 pb-2">
+                  <p className="text-sm text-muted-foreground line-clamp-2">
                     {item.notes}
                   </p>
                 </CardContent>
               )}
-              <CardContent className="pt-0">
+              <CardContent className="space-y-2 pt-0 pb-5 flex-1 flex flex-col justify-end">
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -410,15 +415,16 @@ export default function WishlistPage() {
                     className="flex-1"
                     onClick={() => handleEdit(item)}
                   >
-                    <Edit2 className="h-3 w-3 mr-1" />
+                    <Edit2 className="h-3.5 w-3.5 mr-1.5" />
                     Edit
                   </Button>
                   <Button
-                    variant="destructive"
+                    variant="outline"
                     size="sm"
                     onClick={() => handleDelete(item.id)}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </CardContent>
@@ -426,6 +432,9 @@ export default function WishlistPage() {
           ))}
         </div>
       )}
+      <div className="mt-auto">
+        <Footer />
+      </div>
     </div>
   )
 }

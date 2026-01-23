@@ -15,6 +15,7 @@ import { MeaningInContextExercise } from "@/components/exercises/meaning-in-cont
 import { ClozeBlankExercise } from "@/components/exercises/cloze-blank"
 import { ReverseMcqExercise } from "@/components/exercises/reverse-mcq"
 import { MatchingPairsExercise } from "@/components/exercises/matching-pairs"
+import { Footer } from "@/components/footer"
 
 interface Flashcard {
   flashcard: {
@@ -245,14 +246,17 @@ export default function ReviewPage() {
 
   if (flashcards.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto page-transition">
+      <div className="max-w-4xl mx-auto page-transition flex flex-col min-h-[calc(100vh-4rem-8rem)]">
         <div className="text-center py-16 fade-in">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500/10 to-green-500/5 mb-5 pulse-subtle">
-            <RotateCcw className="h-10 w-10 text-green-600/60 dark:text-green-400/60" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--c-light)] mb-5 pulse-subtle">
+            <RotateCcw className="h-10 w-10 text-[var(--c-soft)]" />
           </div>
           <h2 className="text-2xl md:text-3xl font-bold mb-3 tracking-tight">All caught up!</h2>
-          <p className="text-muted-foreground text-lg mb-6 max-w-md mx-auto">
+          <p className="text-muted-foreground text-lg mb-4 max-w-md mx-auto">
             You've completed all your reviews for now. Keep reading to discover new words and continue your learning journey.
+          </p>
+          <p className="text-sm text-muted-foreground/70 mb-6 max-w-md mx-auto italic">
+            Your reading companion for learning English
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a href="/library">
@@ -346,8 +350,8 @@ export default function ReviewPage() {
   const progressPercentage = ((currentIndex + 1) / flashcards.length) * 100
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition overflow-y-auto">
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6 py-8">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition overflow-y-auto flex flex-col">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 md:px-6 py-8">
         {/* Minimal Header */}
         <div className="w-full max-w-2xl mb-6 fade-in">
           <div className="flex items-center justify-between mb-4">
@@ -373,6 +377,9 @@ export default function ReviewPage() {
             {renderExercise()}
           </div>
         </div>
+      </div>
+      <div className="mt-auto">
+        <Footer />
       </div>
     </div>
   )

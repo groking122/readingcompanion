@@ -4,8 +4,10 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { UserButton } from "@clerk/nextjs"
-import { BookOpen, BookMarked, RotateCcw, Moon, Sun, Heart, Sparkles, Home, Menu, X } from "lucide-react"
+import { BookOpen, BookMarked, RotateCcw, Heart, Sparkles, Home, Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { ThemeRandomizer } from "@/components/theme-randomizer"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -18,31 +20,7 @@ const navItems = [
 
 export function Nav() {
   const pathname = usePathname()
-  const [isDarkMode, setIsDarkMode] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-  useEffect(() => {
-    // Check for saved dark mode preference
-    const savedDarkMode = localStorage.getItem("darkMode") === "true"
-    setIsDarkMode(savedDarkMode)
-    if (savedDarkMode) {
-      document.documentElement.classList.add("dark")
-    }
-  }, [])
-
-  const toggleDarkMode = () => {
-    const newDarkMode = !isDarkMode
-    setIsDarkMode(newDarkMode)
-    localStorage.setItem("darkMode", newDarkMode.toString())
-    
-    // Apply theme change immediately and synchronously
-    // Remove requestAnimationFrame to ensure all elements change at the same time
-    if (newDarkMode) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
-  }
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -81,10 +59,10 @@ export function Nav() {
                   <span className="relative">
                     {item.label}
                     {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--c-spark)] rounded-full" />
                     )}
                     {!isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-muted-foreground/30 scale-x-0 group-hover:scale-x-100 transition-transform duration-200 rounded-full" />
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--c-soft)]/30 scale-x-0 group-hover:scale-x-100 transition-transform duration-200 rounded-full" />
                     )}
                   </span>
                 </Link>
@@ -108,22 +86,11 @@ export function Nav() {
                 <Menu className="h-5 w-5" />
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleDarkMode}
-              className="h-9 w-9 p-0 rounded-lg hover:bg-accent/50 transition-[background-color,transform] duration-150 ease-out relative overflow-hidden"
-              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-              aria-label="Toggle theme"
-            >
-              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 ease-out" style={{ opacity: isDarkMode ? 0 : 1 }}>
-                <Moon className="h-4 w-4" />
-              </span>
-              <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 ease-out" style={{ opacity: isDarkMode ? 1 : 0 }}>
-                <Sun className="h-4 w-4" />
-              </span>
-              <span className="sr-only">Toggle theme</span>
-            </Button>
+            {/* Theme Controls */}
+            <div className="hidden md:flex items-center gap-2">
+              <ThemeToggle />
+              <ThemeRandomizer />
+            </div>
             <UserButton />
           </div>
         </div>
@@ -154,8 +121,8 @@ export function Nav() {
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all duration-200",
                     pathname === "/"
-                      ? "bg-primary text-primary-foreground shadow-soft"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground hover:text-foreground"
+                      ? "bg-[var(--c-strong)] text-[var(--c-canvas)]"
+                      : "text-muted-foreground hover:opacity-80"
                   )}
                 >
                   <Home className="h-5 w-5" />
@@ -172,8 +139,8 @@ export function Nav() {
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-all duration-200",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-soft"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground hover:text-foreground"
+                          ? "bg-[var(--c-strong)] text-[var(--c-canvas)]"
+                          : "text-muted-foreground hover:opacity-80"
                       )}
                     >
                       <Icon className="h-5 w-5" />

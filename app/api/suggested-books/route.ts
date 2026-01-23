@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm"
 
 // Curated list of books from the GitHub repository
 // Add books here to show them in the Suggested Books page
-const staticSuggestedBooks: Array<{ title: string; author: string; category: string; githubUrl?: string }> = [
+const staticSuggestedBooks: Array<{ title: string; author: string | null; category: string; githubUrl?: string }> = [
   // Example format:
   // { title: "Book Title", author: "Author Name", category: "Category", githubUrl: "path/to/file.epub" },
   // { title: "Another Book", author: "Another Author", category: "Self-Improvement" }, // No githubUrl = can't download EPUB
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Convert database books to suggested books format
     const dbSuggestedBooks = uploadedBooks.map((book) => ({
       title: book.title,
-      author: "Unknown", // Database doesn't store author for default books
+      author: null as string | null, // Database doesn't store author for default books
       category: book.category || "book",
       githubUrl: book.type === "epub" ? `${book.title}.epub` : undefined, // Mark as available EPUB
       isUploaded: true, // Flag to indicate it's from database
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       filteredBooks = filteredBooks.filter(
         (book) =>
           book.title.toLowerCase().includes(searchLower) ||
-          book.author.toLowerCase().includes(searchLower) ||
+          (book.author && book.author.toLowerCase().includes(searchLower)) ||
           book.category.toLowerCase().includes(searchLower)
       )
     }

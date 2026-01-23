@@ -1,8 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     config.resolve.alias.canvas = false;
+    
+    // Use memory cache instead of filesystem cache to avoid Windows file locking issues
+    if (dev) {
+      config.cache = {
+        type: 'memory',
+        maxGenerations: 1,
+      };
+    }
     
     // Handle pdfjs-dist for server-side
     if (isServer) {

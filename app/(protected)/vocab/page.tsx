@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, BookOpen, BookMarked, Calendar, FileText, RotateCcw, ExternalLink, Download, Upload, List, Grid, CheckSquare, Square, Trash2 } from "lucide-react"
+import { formatTitleCase } from "@/lib/utils"
+import { Footer } from "@/components/footer"
 
 interface Flashcard {
   id: string
@@ -309,7 +311,7 @@ export default function VocabPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto page-transition">
+      <div className="max-w-4xl mx-auto page-transition flex flex-col min-h-[calc(100vh-4rem-8rem)]">
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
           <div className="relative">
             <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
@@ -321,7 +323,7 @@ export default function VocabPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto page-transition">
+    <div className="max-w-4xl mx-auto page-transition flex flex-col min-h-[calc(100vh-4rem-8rem)]">
       <div className="mb-8 fade-in">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
@@ -330,8 +332,8 @@ export default function VocabPage() {
                 Your Words
               </span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 tracking-tight">My Vocabulary</h1>
-            <p className="text-muted-foreground text-lg">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2 tracking-tight font-serif">My Vocabulary</h1>
+            <p className="text-muted-foreground text-lg mb-1">
               {deduplicatedVocab.length === 0 ? (
                 "Start building your vocabulary"
               ) : (
@@ -344,6 +346,9 @@ export default function VocabPage() {
                   )}
                 </>
               )}
+            </p>
+            <p className="text-sm text-muted-foreground/70 italic">
+              Your reading companion for learning English
             </p>
           </div>
           <div className="flex gap-2">
@@ -405,24 +410,29 @@ export default function VocabPage() {
       </div>
 
       {filteredVocab.length === 0 ? (
-        <Card className="border-dashed">
+        <Card className="border border-border/50">
           <CardContent className="py-16 text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/5 mb-5 pulse-subtle">
               <BookMarked className="h-10 w-10 text-purple-600/60 dark:text-purple-400/60" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">
+            <h3 className="text-xl font-semibold mb-2 font-serif">
               {vocab.length === 0
                 ? "Your vocabulary collection is empty"
                 : "No words match your search"}
             </h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            <p className="text-muted-foreground mb-4 max-w-md mx-auto">
               {vocab.length === 0
                 ? "As you read, save words that catch your attention. Each one is a step toward fluency."
                 : "Try adjusting your search terms or filters to find what you're looking for."}
             </p>
+            {vocab.length === 0 && (
+              <p className="text-sm text-muted-foreground/70 mb-6 max-w-md mx-auto italic">
+                Your reading companion for learning English
+              </p>
+            )}
             {vocab.length === 0 ? (
               <Link href="/library">
-                <Button size="default" className="font-medium shadow-soft hover:shadow-elevated transition-all">
+                <Button size="default" className="font-medium shadow-soft hover:shadow-elevated transition-all bg-white text-black hover:bg-white/90">
                   Start Reading
                 </Button>
               </Link>
@@ -460,7 +470,7 @@ export default function VocabPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-lg mb-1.5 break-words group-hover:text-primary transition-colors duration-300 font-semibold">
-                        {item.term}
+                        {formatTitleCase(item.term)}
                       </CardTitle>
                       <CardDescription className="text-base font-medium text-foreground/90 mt-1.5">
                         {item.translation}
@@ -468,7 +478,7 @@ export default function VocabPage() {
                     </div>
                     {isDue && (
                       <div className="flex-shrink-0">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 animate-pulse">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border border-[var(--c-spark)]/50 bg-[var(--c-spark)]/10 text-[var(--c-spark)] animate-pulse">
                           Due
                         </span>
                       </div>
@@ -483,75 +493,63 @@ export default function VocabPage() {
                           <FileText className="h-3 w-3" />
                           <span className="text-xs font-medium">Context</span>
                         </div>
-                        {item.pageNumber && (
+                        {(item.pageNumber || item.epubLocation) && (
                           <button
                             onClick={() => navigateToWord(item)}
                             className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
                           >
-                            <span>Page {item.pageNumber}</span>
-                            <ExternalLink className="h-3 w-3" />
-                          </button>
-                        )}
-                        {item.epubLocation && !item.pageNumber && (
-                          <button
-                            onClick={() => navigateToWord(item)}
-                            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-                          >
-                            <span>Go to location</span>
-                            <ExternalLink className="h-3 w-3" />
+                            {item.pageNumber ? (
+                              <>
+                                <span>Page {item.pageNumber}</span>
+                                <ExternalLink className="h-3 w-3" />
+                              </>
+                            ) : (
+                              <>
+                                <span>Go to location</span>
+                                <ExternalLink className="h-3 w-3" />
+                              </>
+                            )}
                           </button>
                         )}
                       </div>
-                      <p className="text-muted-foreground italic line-clamp-2">
-                        "{item.context}"
+                      <p className="text-muted-foreground italic line-clamp-1">
+                        "{formatTitleCase(item.context)}"
                       </p>
                     </div>
                   )}
                   
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-2 border-t">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
                     {book && (
                       <div className="flex items-center gap-1">
                         <BookOpen className="h-3 w-3" />
-                        <span className="truncate max-w-[120px]">{book.title}</span>
+                        <span className="truncate max-w-[120px]">{formatTitleCase(book.title)}</span>
                       </div>
                     )}
                     {item.pageNumber && (
-                      <div className="flex items-center gap-1">
-                        <span>Page {item.pageNumber}</span>
-                      </div>
+                      <span>• Page {item.pageNumber}</span>
                     )}
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>{daysSinceSaved === 0 ? "Today" : daysSinceSaved === 1 ? "1 day ago" : `${daysSinceSaved} days ago`}</span>
-                    </div>
-                  </div>
-
-                  {item.flashcard && (
-                    <div className="pt-2 border-t space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1 text-muted-foreground">
+                    <span>• {daysSinceSaved === 0 ? "Today" : daysSinceSaved === 1 ? "1 day ago" : `${daysSinceSaved} days ago`}</span>
+                    {item.flashcard && (
+                      <>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
                           <RotateCcw className="h-3 w-3" />
                           <span>{item.flashcard.repetitions} {item.flashcard.repetitions === 1 ? 'review' : 'reviews'}</span>
                         </div>
-                        {nextReview && (
-                          <div className={`flex items-center gap-1 ${isDue ? 'text-orange-600 dark:text-orange-400 font-medium' : 'text-muted-foreground'}`}>
-                            <span>Next review:</span>
-                            <span>{isDue ? 'Due now' : nextReview.toLocaleDateString()}</span>
-                          </div>
-                        )}
-                      </div>
-                      {!isDue && nextReview && (
-                        <div className="text-xs text-muted-foreground">
-                          {(() => {
-                            const daysUntil = Math.ceil((nextReview.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                            if (daysUntil === 0) return "Due today"
-                            if (daysUntil === 1) return "Due tomorrow"
-                            if (daysUntil < 7) return `Due in ${daysUntil} days`
-                            if (daysUntil < 30) return `Due in ${Math.ceil(daysUntil / 7)} weeks`
-                            return `Due in ${Math.ceil(daysUntil / 30)} months`
-                          })()}
-                        </div>
-                      )}
+                      </>
+                    )}
+                  </div>
+
+                  {item.flashcard && isDue && (
+                    <div className="pt-2 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => window.location.href = '/review'}
+                      >
+                        Review Now
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -560,6 +558,9 @@ export default function VocabPage() {
           })}
         </div>
       )}
+      <div className="mt-auto">
+        <Footer />
+      </div>
     </div>
   )
 }

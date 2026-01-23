@@ -1,9 +1,15 @@
 /**
  * Design Tokens - Centralized design system values
  * Based on design principles from 150+ sources
+ * 
+ * Now uses 5-Color Minimalist Theme System
  */
 
+// Re-export theme configuration
+export { themes, type Theme } from "./theme-controller"
+
 // Color Palette - Semantic and Purposeful
+// Note: Colors now use CSS variables from theme system
 export const colors = {
   // Primary Brand Colors
   primary: {
@@ -224,4 +230,13 @@ export const designTokens = {
 } as const
 
 export type DesignTokens = typeof designTokens
+
+// 5-Color Minimalist Theme System Color Roles
+export const colorRoles = {
+  canvas: "var(--c-canvas)",  // Page background, empty space
+  ink: "var(--c-ink)",          // Headings, body text, icons
+  strong: "var(--c-strong)",   // Primary buttons, active states, high-emphasis borders
+  soft: "var(--c-soft)",       // Secondary buttons, card borders, dividers, sub-text
+  spark: "var(--c-spark)",     // Toggle switches, focus rings, badges, links
+} as const
 

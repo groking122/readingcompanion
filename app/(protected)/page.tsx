@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { BookOpen, Heart, Sparkles, BookMarked, RotateCcw, ChevronDown, ChevronUp, ExternalLink } from "lucide-react"
+import { BookOpen, Heart, Sparkles, BookMarked, RotateCcw, ChevronDown, ChevronUp, ExternalLink, Plus } from "lucide-react"
 import { useUser } from "@clerk/nextjs"
 import Link from "next/link"
+import { formatTitleCase } from "@/lib/utils"
+import { Footer } from "@/components/footer"
 
 interface Book {
   id: string
@@ -30,6 +32,7 @@ interface WishlistItem {
   title: string
   author: string | null
   status: string
+  notes?: string | null
 }
 
 interface VocabularyItem {
@@ -77,9 +80,85 @@ export default function HomePage() {
     review: false,
   })
 
+  // Tooltip state for wishlist book spines
+  const [tooltip, setTooltip] = useState<{
+    top: number
+    left: number
+    visible: boolean
+    itemId: string | null
+    title: string
+    author: string | null
+    arrowPosition: number // Horizontal position for arrow to align with book spine
+    arrowDirection: 'up' | 'down' // Direction arrow should point
+  }>({
+    top: 0,
+    left: 0,
+    visible: false,
+    itemId: null,
+    title: '',
+    author: null,
+    arrowPosition: 0,
+    arrowDirection: 'down',
+  })
+  
+  const spineRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+
   useEffect(() => {
     fetchDashboardData()
   }, [])
+
+  // Handle scroll and resize for tooltip positioning
+  useEffect(() => {
+    if (!tooltip.visible || !tooltip.itemId) return
+
+    const updateTooltipPosition = () => {
+      const itemId = tooltip.itemId
+      if (!itemId) return
+      const spineElement = spineRefs.current[itemId]
+      if (!spineElement) return
+
+      const rect = spineElement.getBoundingClientRect()
+      const tooltipHeight = 40
+      const tooltipWidth = 200
+      const spacing = 8
+      const viewportPadding = 10
+
+      // Calculate spine center for arrow alignment
+      const spineCenterX = rect.left + rect.width / 2
+
+      // Try to position above first
+      let top = rect.top - tooltipHeight - spacing
+      let left = spineCenterX - tooltipWidth / 2
+      let arrowDirection: 'up' | 'down' = 'down'
+
+      // If not enough space above, position below
+      if (top < viewportPadding) {
+        top = rect.bottom + spacing
+        arrowDirection = 'up'
+      }
+
+      // Keep tooltip within viewport horizontally
+      if (left < viewportPadding) {
+        left = viewportPadding
+      } else if (left + tooltipWidth > window.innerWidth - viewportPadding) {
+        left = window.innerWidth - tooltipWidth - viewportPadding
+      }
+
+      // Calculate arrow position relative to tooltip (spine center - tooltip left)
+      const arrowPosition = spineCenterX - left
+
+      setTooltip(prev => ({ ...prev, top, left, arrowPosition, arrowDirection }))
+    }
+
+    updateTooltipPosition()
+    window.addEventListener('scroll', updateTooltipPosition, true)
+    window.addEventListener('resize', updateTooltipPosition)
+
+    return () => {
+      window.removeEventListener('scroll', updateTooltipPosition, true)
+      window.removeEventListener('resize', updateTooltipPosition)
+    }
+  }, [tooltip.visible, tooltip.itemId])
 
   const fetchDashboardData = async () => {
     try {
@@ -205,11 +284,10 @@ export default function HomePage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto page-transition">
+    <div className="max-w-7xl mx-auto page-transition" style={{ overflow: 'visible' }}>
       {/* Header Section - Personal Greeting */}
       <div className="relative mb-8 lg:mb-12">
-        {/* Subtle mesh gradient from top-right */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-amber/10 via-violet/5 to-transparent rounded-full blur-3xl pointer-events-none opacity-50" />
+        {/* Subtle mesh gradient from top-right - removed, using solid colors */}
         
         {/* Greeting Content - Aligned with Current Book card */}
         <div className="relative z-10">
@@ -231,20 +309,20 @@ export default function HomePage() {
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-4 md:gap-6 mb-6 md:mb-8 items-stretch">
         {/* Current Book Hero Card - 60% width */}
-        <div className="lg:col-span-6 flex">
+        <div className="lg:col-span-6 flex h-full">
           {currentBook ? (
-            <div className="bento-card glass-card p-6 md:p-8 relative group w-full">
+            <div className="bento-card glass-card p-6 md:p-8 relative group w-full h-full">
               <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
                 {/* Book Cover Placeholder */}
                 <div className="flex-shrink-0">
-                  <div className="w-24 h-32 md:w-32 md:h-40 rounded-lg bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center shadow-lg">
-                    <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-amber/60" />
+                  <div className="w-24 h-32 md:w-32 md:h-40 rounded-lg bg-[var(--c-light)] flex items-center justify-center">
+                    <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-[var(--c-soft)]" />
                   </div>
                 </div>
                 
                 {/* Book Info */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold mb-2 line-clamp-2">{currentBook.title}</h3>
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold mb-2 line-clamp-2">{formatTitleCase(currentBook.title)}</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground mb-3 md:mb-4">Author Name</p>
                   
                   {/* Progress Bar */}
@@ -262,7 +340,7 @@ export default function HomePage() {
                   
                   {/* Resume Button */}
                   <Link href={`/reader/${currentBook.id}`}>
-                    <Button className="w-full sm:w-auto px-6 md:px-8 py-4 md:py-6 rounded-full text-sm md:text-base font-semibold bg-gradient-to-r from-amber to-violet hover:from-amber/90 hover:to-violet/90 transition-all shadow-lg hover:shadow-xl">
+                    <Button className="w-full sm:w-auto px-6 md:px-8 py-4 md:py-6 rounded-full text-sm md:text-base font-semibold">
                       Resume Reading
                     </Button>
                   </Link>
@@ -270,23 +348,40 @@ export default function HomePage() {
               </div>
             </div>
           ) : (
-            <div className="bento-card glass-card p-8 md:p-12 text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-amber/20 to-violet/20 mb-5">
-                <BookOpen className="h-10 w-10 text-amber/60" />
+            <div className="bento-card glass-card p-8 md:p-12 text-center w-full h-full flex flex-col justify-between">
+              <div className="flex-1 flex flex-col justify-center">
+                {/* Icon above the title */}
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-xl bg-[var(--c-light)] mb-5 mx-auto group hover:scale-105 transition-transform duration-300">
+                  <BookOpen className="h-10 w-10 text-[var(--c-soft)] group-hover:text-[var(--c-spark)] transition-colors duration-300" />
+                </div>
+                <p className="text-xl font-serif font-semibold mb-2">Your library awaits</p>
+                <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
+                  Every great reading journey begins with a single book.
+                </p>
+                
+                {/* Info Box - Only shown when no books */}
+                <div className="mb-6 p-4 rounded-lg border border-border/50 bg-background/50 backdrop-blur-sm max-w-lg mx-auto hover:border-border/70 transition-colors duration-300">
+                  <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
+                    <span className="font-semibold text-foreground">Your reading companion for learning English.</span>{" "}
+                    The smart way to learn English through reading. Instant Greek translations, vocabulary tracking, and adaptive flashcards help you learn naturally.
+                  </p>
+                </div>
               </div>
-              <p className="text-xl font-serif font-semibold mb-2">Your library awaits</p>
-              <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                Every great reading journey begins with a single book.
-              </p>
-              <Link href="/library">
-                <Button className="font-medium">Add Your First Book</Button>
-              </Link>
+              
+              <div>
+                <Link href="/library">
+                  <Button className="font-medium shadow-soft hover:shadow-elevated transition-all">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Your First Book
+                  </Button>
+                </Link>
+              </div>
             </div>
           )}
         </div>
         
         {/* Stats Bento Cards - 40% width (3 cards stacked to match Hero height) */}
-        <div className="lg:col-span-4 flex flex-col gap-2 md:gap-4 h-full">
+        <div className="lg:col-span-4 flex flex-col gap-2 md:gap-4 h-full items-stretch">
           {/* Books Stat */}
           <div className="bento-card p-4 md:p-6 flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform duration-300 flex-1">
             <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{books.length || 0}</div>
@@ -298,7 +393,7 @@ export default function HomePage() {
             <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{vocabularyItems.length || 0}</div>
             <div className="text-[10px] md:text-xs text-muted-foreground font-medium">Words</div>
             {/* Animated graph line on hover */}
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-violet/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[var(--c-spark)]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <svg className="w-full h-full" viewBox="0 0 100 10" preserveAspectRatio="none">
                 <path d="M0,8 Q25,2 50,5 T100,3" stroke="currentColor" strokeWidth="1" fill="none" className="text-violet" />
               </svg>
@@ -313,77 +408,192 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 lg:gap-8 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 lg:gap-8 items-stretch" style={{ overflow: 'visible' }}>
 
         {/* Wishlist Widget - Book Spines */}
-        <div className="bento-card p-6 flex flex-col h-full">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="rounded-lg bg-pink-500/20 p-2">
-              <Heart className="h-5 w-5 text-pink-500" />
+        <div className="relative" style={{ overflow: 'visible', zIndex: 1 }}>
+          <div className="bento-card p-6 flex flex-col h-full" style={{ overflow: 'visible' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-[var(--c-light)] p-2 group hover:scale-105 transition-transform duration-300">
+                  <Heart className="h-5 w-5 text-[var(--c-soft)] group-hover:text-[var(--c-spark)] transition-colors duration-300" />
+                </div>
+                <h3 className="text-lg font-serif font-semibold">Wishlist</h3>
+              </div>
+              {wishlistItems.length > 0 && (
+                <span className="text-xs font-medium px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  {wishlistItems.length}
+                </span>
+              )}
             </div>
-            <h3 className="text-lg font-serif font-semibold">Wishlist</h3>
-          </div>
-          {wishlistItems.length > 0 ? (
-            <>
-              <div className="flex gap-2 items-end h-32 overflow-x-auto pb-2 flex-1">
-                {wishlistItems.slice(0, 5).map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="flex-shrink-0 book-spine group cursor-pointer"
+            {wishlistItems.length > 0 ? (
+              <>
+                <div className="flex gap-3 items-end min-h-[140px] overflow-x-auto pb-2 flex-1 scrollbar-hide">
+                {wishlistItems.slice(0, 5).map((item, index) => {
+                  const colors = [
+                    { from: '240 70% 60%', to: '270 70% 65%' },
+                    { from: '260 70% 58%', to: '280 70% 63%' },
+                    { from: '280 70% 56%', to: '290 70% 61%' },
+                    { from: '300 70% 54%', to: '310 70% 59%' },
+                    { from: '320 70% 52%', to: '330 70% 57%' },
+                  ]
+                  const color = colors[index % colors.length]
+                  
+                  return (
+                    <div
+                      key={item.id}
+                      ref={(el) => {
+                        spineRefs.current[item.id] = el
+                      }}
+                      className="flex-shrink-0 relative group"
+                      style={{ zIndex: 1 }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.zIndex = '50'
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const tooltipHeight = 40
+                        const tooltipWidth = 200
+                        const spacing = 8
+                        const viewportPadding = 10
+
+                        // Calculate spine center for arrow alignment
+                        const spineCenterX = rect.left + rect.width / 2
+
+                        // Try to position above first
+                        let top = rect.top - tooltipHeight - spacing
+                        let left = spineCenterX - tooltipWidth / 2
+                        let arrowDirection: 'up' | 'down' = 'down'
+
+                        // If not enough space above, position below
+                        if (top < viewportPadding) {
+                          top = rect.bottom + spacing
+                          arrowDirection = 'up'
+                        }
+
+                        // Keep tooltip within viewport horizontally
+                        if (left < viewportPadding) {
+                          left = viewportPadding
+                        } else if (left + tooltipWidth > window.innerWidth - viewportPadding) {
+                          left = window.innerWidth - tooltipWidth - viewportPadding
+                        }
+
+                        // Calculate arrow position relative to tooltip (spine center - tooltip left)
+                        const arrowPosition = spineCenterX - left
+
+                        setTooltip({
+                          top,
+                          left,
+                          visible: true,
+                          itemId: item.id,
+                          title: item.title,
+                          author: item.author,
+                          arrowPosition,
+                          arrowDirection,
+                        })
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.zIndex = '1'
+                        setTooltip(prev => ({ ...prev, visible: false, itemId: null }))
+                      }}
+                    >
+                      <Link
+                        href="/wishlist"
+                        className="book-spine cursor-pointer relative block"
+                        style={{
+                          width: '28px',
+                          height: `${90 + index * 10}px`,
+                          background: `linear-gradient(135deg, hsl(${color.from}), hsl(${color.to}))`,
+                          borderRadius: '4px 4px 0 0',
+                          boxShadow: 'inset -3px 0 6px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transform: 'translateY(0)',
+                        }}
+                        onMouseEnter={(e) => {
+                          const parent = e.currentTarget.parentElement
+                          if (parent) {
+                            parent.style.zIndex = '50'
+                          }
+                          e.currentTarget.style.transform = 'translateY(-6px) scale(1.08)'
+                          e.currentTarget.style.boxShadow = 'inset -3px 0 6px rgba(0,0,0,0.2), 0 8px 16px rgba(0,0,0,0.2)'
+                        }}
+                        onMouseLeave={(e) => {
+                          const parent = e.currentTarget.parentElement
+                          if (parent) {
+                            parent.style.zIndex = '1'
+                          }
+                          e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                          e.currentTarget.style.boxShadow = 'inset -3px 0 6px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <div className="w-1 h-8 bg-white/30 rounded-full"></div>
+                        </div>
+                      </Link>
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Fixed position tooltip */}
+              {tooltip.visible && tooltip.itemId && (
+                <div
+                  className="fixed pointer-events-none z-[99999] transition-opacity duration-150"
+                  style={{
+                    top: `${tooltip.top}px`,
+                    left: `${tooltip.left}px`,
+                    opacity: tooltip.visible ? 1 : 0,
+                  }}
+                >
+                  <div className="px-2.5 py-1.5 bg-foreground/95 text-background rounded-md shadow-xl text-xs font-medium whitespace-nowrap backdrop-blur-sm border border-background/20">
+                    {formatTitleCase(tooltip.title)}
+                    {tooltip.author && tooltip.author !== "Unknown" && (
+                      <span className="text-background/70 ml-1">• {tooltip.author}</span>
+                    )}
+                  </div>
+                  {/* Dynamic arrow pointing to book spine */}
+                  <div 
+                    className={`absolute ${tooltip.arrowDirection === 'down' ? 'top-full -mt-0.5' : 'bottom-full -mb-0.5'}`}
                     style={{
-                      width: '24px',
-                      height: `${80 + index * 8}px`,
-                      background: `linear-gradient(135deg, hsl(${240 + index * 20}, 70%, ${50 + index * 5}%), hsl(${260 + index * 20}, 60%, ${45 + index * 5}%))`,
-                      borderRadius: '2px 2px 0 0',
-                      boxShadow: 'inset -2px 0 4px rgba(0,0,0,0.3)',
-                      transition: 'all 0.3s ease',
-                      transform: 'translateY(0)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-4px) scale(1.05)'
-                      e.currentTarget.style.zIndex = '10'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                      e.currentTarget.style.zIndex = '1'
+                      left: `${tooltip.arrowPosition}px`,
+                      transform: 'translateX(-50%)',
                     }}
                   >
-                    <div className="absolute bottom-0 left-0 right-0 p-1 text-[8px] font-bold text-white/80 rotate-90 origin-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                      {item.title}
-                    </div>
+                    <div className={`w-1.5 h-1.5 bg-foreground/95 transform rotate-45 border-r border-b border-background/20 ${tooltip.arrowDirection === 'up' ? 'border-t border-l' : ''}`}></div>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
               <div className="mt-4 pt-4 border-t border-border/50">
                 <Link href="/wishlist">
-                  <Button variant="ghost" size="sm" className="w-full text-xs">
-                    View All →
+                  <Button variant="ghost" size="sm" className="w-full text-xs hover:bg-accent/50">
+                    View All {wishlistItems.length > 5 && `(${wishlistItems.length})`} →
                   </Button>
                 </Link>
               </div>
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
-              <div className="w-24 h-32 rounded-lg bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center mb-4 shadow-lg">
-                <BookOpen className="h-12 w-12 text-amber/60" />
+              <div className="w-20 h-20 rounded-xl bg-[var(--c-light)] flex items-center justify-center mb-4 group hover:scale-105 transition-transform duration-300">
+                <Heart className="h-10 w-10 text-[var(--c-soft)] group-hover:text-[var(--c-spark)] transition-colors duration-300" />
               </div>
-              <p className="font-serif font-semibold mb-1">Thinking, Fast and Slow</p>
-              <p className="text-xs text-muted-foreground mb-4">By Daniel Kahneman</p>
+              <p className="font-serif font-semibold mb-2">Your wishlist is empty</p>
+              <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                Start building your reading wishlist. Add books that spark your curiosity.
+              </p>
               <Link href="/wishlist">
-                <Button size="sm" className="font-medium">
-                  Add to List
+                <Button size="sm" className="font-medium shadow-soft hover:shadow-elevated transition-all">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  Add Your First Book
                 </Button>
               </Link>
             </div>
           )}
+          </div>
         </div>
 
         {/* Recent Words Widget - Flashcard Strip */}
         <div className="bento-card p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-violet/20 p-2">
-                <BookMarked className="h-5 w-5 text-violet" />
+              <div className="rounded-lg bg-[var(--c-light)] p-2 group hover:scale-105 transition-transform duration-300">
+                <BookMarked className="h-5 w-5 text-[var(--c-soft)] group-hover:text-[var(--c-spark)] transition-colors duration-300" />
               </div>
               <h3 className="text-lg font-serif font-semibold">Recent Words</h3>
             </div>
@@ -403,7 +613,7 @@ export default function HomePage() {
                     key={item.id}
                     className="recent-word-card group cursor-pointer hover:shadow-soft"
                   >
-                    <p className="font-bold text-sm text-foreground mb-1 line-clamp-1">{item.term}</p>
+                    <p className="font-bold text-sm text-foreground mb-1 line-clamp-1">{formatTitleCase(item.term)}</p>
                     <p className="text-xs text-muted-foreground italic line-clamp-1">
                       {item.translation}
                     </p>
@@ -441,8 +651,8 @@ export default function HomePage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
           <Link href="/library" className="group">
             <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
-              <div className="icon-container icon-premium bg-primary/10 text-primary mx-auto mb-3 md:mb-4 group-hover:bg-primary/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
-                <BookOpen className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-primary" />
+              <div className="icon-container icon-premium bg-[var(--c-light)] text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)] mx-auto mb-3 md:mb-4 group-hover:bg-[var(--c-soft)]/20 group-hover:-translate-y-0.5 transition-all duration-300 relative">
+                <BookOpen className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px]" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Library</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your books</p>
@@ -450,8 +660,8 @@ export default function HomePage() {
           </Link>
           <Link href="/suggested" className="group">
             <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
-              <div className="icon-container icon-premium bg-blue-500/10 text-blue-500 mx-auto mb-3 md:mb-4 group-hover:bg-blue-500/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
-                <Sparkles className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-blue" />
+              <div className="icon-container icon-premium bg-[var(--c-light)] text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)] mx-auto mb-3 md:mb-4 group-hover:bg-[var(--c-soft)]/20 group-hover:-translate-y-0.5 transition-all duration-300 relative">
+                <Sparkles className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px]" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Suggested</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Discover</p>
@@ -459,8 +669,8 @@ export default function HomePage() {
           </Link>
           <Link href="/vocab" className="group">
             <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
-              <div className="icon-container icon-premium bg-violet/10 text-violet mx-auto mb-3 md:mb-4 group-hover:bg-violet/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
-                <BookMarked className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-violet" />
+              <div className="icon-container icon-premium bg-[var(--c-light)] text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)] mx-auto mb-3 md:mb-4 group-hover:bg-[var(--c-soft)]/20 group-hover:-translate-y-0.5 transition-all duration-300 relative">
+                <BookMarked className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px]" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Vocabulary</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Your words</p>
@@ -468,8 +678,8 @@ export default function HomePage() {
           </Link>
           <Link href="/review" className="group">
             <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
-              <div className="icon-container icon-premium bg-orange-500/10 text-orange-500 mx-auto mb-3 md:mb-4 group-hover:bg-orange-500/20 group-hover:-translate-y-0.5 group-hover:icon-glow transition-all duration-300 relative">
-                <RotateCcw className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px] icon-gradient-orange" />
+              <div className="icon-container icon-premium bg-[var(--c-light)] text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)] mx-auto mb-3 md:mb-4 group-hover:bg-[var(--c-soft)]/20 group-hover:-translate-y-0.5 transition-all duration-300 relative">
+                <RotateCcw className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px]" />
               </div>
               <p className="text-xs md:text-sm font-semibold">Review</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Practice</p>
@@ -478,22 +688,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="mt-16 md:mt-20 lg:mt-24 py-6 border-t border-border/40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-            <div>© 2026 Lexis Inc.</div>
-            <div className="flex items-center gap-4">
-              <Link href="#" className="hover:text-foreground transition-colors">Privacy</Link>
-              <span>•</span>
-              <Link href="#" className="hover:text-foreground transition-colors">Terms</Link>
-              <span>•</span>
-              <Link href="#" className="hover:text-foreground transition-colors">Support</Link>
-            </div>
-            <div>Made with ♥ for readers</div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

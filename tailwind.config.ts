@@ -37,44 +37,44 @@ const config = {
         '88': '22rem',
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        border: "var(--c-soft)",
+        input: "var(--c-soft)",
+        ring: "var(--c-spark)",
+        background: "var(--c-canvas)",
+        foreground: "var(--c-ink)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "var(--c-strong)",
+          foreground: "var(--c-canvas)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "transparent",
+          foreground: "var(--c-strong)",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "transparent",
+          foreground: "var(--c-soft)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "var(--c-spark)",
+          foreground: "var(--c-ink)",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "transparent",
+          foreground: "var(--c-ink)",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "transparent",
+          foreground: "var(--c-ink)",
         },
         amber: {
-          DEFAULT: "hsl(var(--amber))",
+          DEFAULT: "hsl(38, 92%, 60%)",
         },
         violet: {
-          DEFAULT: "hsl(var(--violet))",
+          DEFAULT: "hsl(270, 80%, 65%)",
         },
       },
       borderRadius: {

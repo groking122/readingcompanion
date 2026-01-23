@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Search, Heart, BookOpen, Sparkles, Check } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/lib/toast"
+import { formatTitleCase } from "@/lib/utils"
+import { Footer } from "@/components/footer"
 
 interface SuggestedBook {
   title: string
@@ -124,7 +126,7 @@ export default function SuggestedBooksPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto page-transition">
+      <div className="max-w-7xl mx-auto page-transition flex flex-col min-h-[calc(100vh-4rem-8rem)]">
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
           <div className="relative">
             <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
@@ -136,7 +138,7 @@ export default function SuggestedBooksPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-6 page-transition">
+    <div className="max-w-7xl mx-auto px-4 md:px-6 page-transition flex flex-col min-h-[calc(100vh-4rem-8rem)]">
       <div className="mb-10 lg:mb-12 fade-in">
         <div className="inline-block mb-4">
           <span className="text-sm font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 backdrop-blur-sm">
@@ -144,10 +146,10 @@ export default function SuggestedBooksPage() {
           </span>
         </div>
         <div className="flex items-center gap-3 mb-4">
-          <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 p-3 shadow-soft">
-            <Sparkles className="h-6 w-6 text-primary" />
+          <div className="rounded-xl bg-[var(--c-light)] p-3">
+            <Sparkles className="h-6 w-6 text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)]" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Suggested Books</h1>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight font-serif">Discover</h1>
         </div>
         <p className="text-muted-foreground text-lg max-w-2xl">
           Curated collection of books to explore. Each one is a gateway to new knowledge and insights. Add them to your wishlist to read later!
@@ -183,12 +185,12 @@ export default function SuggestedBooksPage() {
 
       {/* Books Display */}
       {books.length === 0 ? (
-        <Card className="border-dashed">
+        <Card className="border border-border/50">
           <CardContent className="py-16 text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 mb-5 pulse-subtle">
-              <BookOpen className="h-10 w-10 text-blue-600/60 dark:text-blue-400/60" />
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--c-light)] mb-5 pulse-subtle">
+              <BookOpen className="h-10 w-10 text-[var(--c-soft)]" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">
+            <h3 className="text-xl font-semibold mb-2 font-serif">
               {searchTerm || selectedCategory !== "all"
                 ? "No books match your search"
                 : "No books available"}
@@ -226,18 +228,19 @@ export default function SuggestedBooksPage() {
                   <div className="bento-card glass-card p-6 md:p-8 relative group w-full">
                     <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
                       <div className="flex-shrink-0">
-                        <div className="w-24 h-32 md:w-32 md:h-40 rounded-lg bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center shadow-lg">
-                          <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-amber/60" />
+                        <div className="w-24 h-32 md:w-32 md:h-40 rounded-lg bg-[var(--c-light)] flex items-center justify-center">
+                          <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-[var(--c-soft)]" />
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold mb-2 line-clamp-2">{featuredBook.title}</h3>
-                        <p className="text-sm md:text-base text-muted-foreground mb-4">by {featuredBook.author}</p>
+                        <h3 className="text-xl sm:text-2xl md:text-3xl font-serif font-bold mb-2 line-clamp-2">{formatTitleCase(featuredBook.title)}</h3>
+                        {featuredBook.author && featuredBook.author !== "Unknown" && (
+                          <p className="text-sm md:text-base text-muted-foreground mb-4">by {featuredBook.author}</p>
+                        )}
                         <div className="mb-4">
                           <span
-                            className="px-3 py-1.5 rounded-full text-sm font-medium inline-block"
+                            className="px-3 py-1.5 rounded-full text-sm font-medium inline-block border border-current/20 bg-transparent"
                             style={{
-                              backgroundColor: `${getCategoryColor(featuredBook.category)}20`,
                               color: getCategoryColor(featuredBook.category),
                             }}
                           >
@@ -245,25 +248,25 @@ export default function SuggestedBooksPage() {
                           </span>
                         </div>
                         <div className="flex gap-3">
-                          {featuredBook.githubUrl && featuredBook.githubUrl.endsWith('.epub') ? (
-                            <Button
-                              className="font-medium shadow-soft hover:shadow-elevated transition-all"
-                              onClick={() => handleAddToLibrary(featuredBook)}
-                              disabled={addingToLibrary === bookKey}
-                            >
-                              <BookOpen className="h-4 w-4 mr-2" />
-                              {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB to Library"}
-                            </Button>
-                          ) : null}
                           <Button
-                            className="font-medium transition-all hover:bg-accent/50"
-                            variant="outline"
+                            className="font-medium"
                             onClick={() => handleAddToWishlist(featuredBook)}
                             disabled={addingToWishlist === bookKey}
                           >
                             <Heart className="h-4 w-4 mr-2" />
                             {addingToWishlist === bookKey ? "Adding..." : "Add to Wishlist"}
                           </Button>
+                          {featuredBook.githubUrl && featuredBook.githubUrl.endsWith('.epub') ? (
+                            <Button
+                              className="font-medium transition-all hover:bg-accent/50"
+                              variant="outline"
+                              onClick={() => handleAddToLibrary(featuredBook)}
+                              disabled={addingToLibrary === bookKey}
+                            >
+                              <BookOpen className="h-4 w-4 mr-2" />
+                              {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB"}
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -287,7 +290,7 @@ export default function SuggestedBooksPage() {
 
                 return Object.entries(booksByCategory).map(([category, categoryBooks]) => (
                   <div key={category}>
-                    <h2 className="text-xl md:text-2xl font-serif font-bold mb-4 tracking-tight">{category}</h2>
+                    <h2 className="text-xl md:text-2xl font-serif font-bold mb-4 tracking-tight">{formatTitleCase(category)}</h2>
                     <div className="overflow-x-auto pb-4 -mx-4 px-4">
                       <div className="flex gap-4 min-w-max">
                         {categoryBooks.map((book, index) => {
@@ -295,23 +298,35 @@ export default function SuggestedBooksPage() {
                           return (
                             <Card
                               key={`${book.title}-${index}`}
-                              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-l-4 interactive-scale hover-lift-smooth flex-shrink-0 w-64 bento-card"
+                              className="group transition-all duration-300 border-l-4 flex-shrink-0 w-64 bento-card hover:opacity-80"
                               style={{
                                 borderLeftColor: getCategoryColor(book.category),
                               }}
                             >
                               <CardHeader className="pb-4">
                                 <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors duration-300 font-semibold">
-                                  {book.title}
+                                  {formatTitleCase(book.title)}
                                 </CardTitle>
-                                <CardDescription className="text-sm">
-                                  by {book.author}
-                                </CardDescription>
+                                {book.author && book.author !== "Unknown" && (
+                                  <CardDescription className="text-sm">
+                                    by {book.author}
+                                  </CardDescription>
+                                )}
                               </CardHeader>
                               <CardContent className="space-y-2">
+                                <Button
+                                  className="w-full font-medium text-xs"
+                                  onClick={() => handleAddToWishlist(book)}
+                                  disabled={addingToWishlist === bookKey}
+                                  size="sm"
+                                >
+                                  <Heart className="h-3 w-3 mr-2" />
+                                  Wishlist
+                                </Button>
                                 {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
                                   <Button
-                                    className="w-full font-medium shadow-soft hover:shadow-elevated transition-all text-xs"
+                                    className="w-full font-medium transition-all hover:bg-accent/50 text-xs"
+                                    variant="outline"
                                     onClick={() => handleAddToLibrary(book)}
                                     disabled={addingToLibrary === bookKey}
                                     size="sm"
@@ -320,16 +335,6 @@ export default function SuggestedBooksPage() {
                                     Add EPUB
                                   </Button>
                                 ) : null}
-                                <Button
-                                  className="w-full font-medium transition-all hover:bg-accent/50 text-xs"
-                                  variant="outline"
-                                  onClick={() => handleAddToWishlist(book)}
-                                  disabled={addingToWishlist === bookKey}
-                                  size="sm"
-                                >
-                                  <Heart className="h-3 w-3 mr-2" />
-                                  Wishlist
-                                </Button>
                               </CardContent>
                             </Card>
                           )
@@ -361,18 +366,19 @@ export default function SuggestedBooksPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <CardTitle className="text-lg line-clamp-2 mb-1.5 group-hover:text-primary transition-colors duration-300 font-semibold">
-                              {book.title}
+                              {formatTitleCase(book.title)}
                             </CardTitle>
-                            <CardDescription className="text-sm">
-                              by {book.author}
-                            </CardDescription>
+                            {book.author && book.author !== "Unknown" && (
+                              <CardDescription className="text-sm">
+                                by {book.author}
+                              </CardDescription>
+                            )}
                           </div>
                         </div>
                         <div className="mt-3">
                           <span
-                            className="px-2.5 py-1 rounded-full text-xs font-medium inline-block"
+                            className="px-2.5 py-1 rounded-full text-xs font-medium inline-block border border-current/20 bg-transparent"
                             style={{
-                              backgroundColor: `${getCategoryColor(book.category)}20`,
                               color: getCategoryColor(book.category),
                             }}
                           >
@@ -381,25 +387,8 @@ export default function SuggestedBooksPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-2">
-                        {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
-                          <Button
-                            className="w-full font-medium shadow-soft hover:shadow-elevated transition-all"
-                            onClick={() => handleAddToLibrary(book)}
-                            disabled={addingToLibrary === bookKey}
-                            data-book-key={bookKey}
-                            data-action="library"
-                          >
-                            <BookOpen className="h-4 w-4 mr-2" />
-                            {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB to Library"}
-                          </Button>
-                        ) : (
-                          <div className="text-xs text-muted-foreground text-center py-2 px-3 rounded-md bg-muted/30">
-                            EPUB not directly available
-                          </div>
-                        )}
                         <Button
-                          className="w-full font-medium transition-all hover:bg-accent/50"
-                          variant="outline"
+                          className="w-full font-medium shadow-soft hover:shadow-elevated transition-all bg-white text-black hover:bg-white/90"
                           onClick={() => handleAddToWishlist(book)}
                           disabled={addingToWishlist === bookKey}
                           data-book-key={bookKey}
@@ -408,6 +397,19 @@ export default function SuggestedBooksPage() {
                           <Heart className="h-4 w-4 mr-2" />
                           {addingToWishlist === bookKey ? "Adding..." : "Add to Wishlist"}
                         </Button>
+                        {book.githubUrl && book.githubUrl.endsWith('.epub') ? (
+                          <Button
+                            className="w-full font-medium transition-all hover:bg-accent/50"
+                            variant="outline"
+                            onClick={() => handleAddToLibrary(book)}
+                            disabled={addingToLibrary === bookKey}
+                            data-book-key={bookKey}
+                            data-action="library"
+                          >
+                            <BookOpen className="h-4 w-4 mr-2" />
+                            {addingToLibrary === bookKey ? "Adding EPUB..." : "Add EPUB"}
+                          </Button>
+                        ) : null}
                       </CardContent>
                     </Card>
                   )
@@ -417,29 +419,15 @@ export default function SuggestedBooksPage() {
           )}
         </>
       )}
+      <div className="mt-auto">
+        <Footer />
+      </div>
     </div>
   )
 }
 
 function getCategoryColor(category: string): string {
-  const colorMap: Record<string, string> = {
-    Productivity: "rgb(59 130 246)", // blue
-    "Self-Improvement": "rgb(168 85 247)", // purple
-    Psychology: "rgb(236 72 153)", // pink
-    Communication: "rgb(234 179 8)", // yellow
-    Spirituality: "rgb(34 197 94)", // green
-    Health: "rgb(239 68 68)", // red
-    Business: "rgb(249 115 22)", // orange
-    Career: "rgb(14 165 233)", // sky blue
-    Relationships: "rgb(219 39 119)", // rose
-    Philosophy: "rgb(139 92 246)", // violet
-    Practical: "rgb(107 114 128)", // gray
-    Motivation: "rgb(251 146 60)", // amber
-    Parenting: "rgb(20 184 166)", // teal
-    Education: "rgb(99 102 241)", // indigo
-    "Sports Psychology": "rgb(6 182 212)", // cyan
-    Pets: "rgb(147 197 253)", // light blue
-  }
-  return colorMap[category] || "rgb(59 130 246)"
+  // Use colors from the fixed palette
+  return "var(--c-spark)" // Use SPARK color for all category badges
 }
 

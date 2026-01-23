@@ -8,8 +8,8 @@ export default function ProtectedLayout({
   return (
     <>
       <Nav />
-      <main className="theme-surface min-h-[calc(100vh-4rem)] bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
+      <main className="theme-surface min-h-[calc(100vh-4rem)] bg-background" style={{ overflow: 'visible' }}>
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12" style={{ overflow: 'visible' }}>
           {children}
         </div>
       </main>

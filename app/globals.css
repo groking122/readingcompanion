@@ -4,39 +4,49 @@
 
 @layer base {
   :root {
-    /* Light Theme - Lexis Design System */
-    /* Background: #F4F5F7 (Soft Light Grey) */
-    --background: 220 14% 96%;
-    --foreground: 222.2 84% 4.9%;
-    /* Cards: #FFFFFF (Pure White) */
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    /* Fixed Color Palette - 8 Colors (Theme 1: Lavender Storm) */
+    /* Core 5-color semantic variables */
+    --c-canvas: #ECEFF3;  /* CANVAS: Page background, empty space */
+    --c-ink: #292B30;     /* INK: Headings, body text, icons */
+    --c-strong: #605F6F;  /* STRONG: Primary buttons, active states, high-emphasis borders */
+    --c-soft: #A196AE;   /* SOFT: Secondary buttons, card borders, dividers, sub-text */
+    --c-spark: #C4B1CE;  /* SPARK: Toggle switches, focus rings, badges, links */
+    
+    /* Additional colors from the 8-color palette */
+    --c-hover: #44454F;   /* Hover states, darker buttons, emphasis */
+    --c-muted: #807A8F;   /* Secondary borders, muted elements, disabled states */
+    --c-light: #E8E6F0;   /* Light backgrounds, subtle highlights - lighter and more neutral */
+    
+    /* Mapped to Tailwind-compatible variables for compatibility */
+    --background: var(--c-canvas);
+    --foreground: var(--c-ink);
+    --card: transparent;  /* Cards have no fills - minimalist (overridden for Jet Black theme) */
+    --card-foreground: var(--c-ink);
+    --popover: transparent;
+    --popover-foreground: var(--c-ink);
+    --primary: var(--c-strong);
+    --primary-foreground: var(--c-canvas);
+    --secondary: transparent;
+    --secondary-foreground: var(--c-strong);
+    --muted: transparent;
+    --muted-foreground: var(--c-muted);
+    --accent: var(--c-spark);
+    --accent-foreground: var(--c-ink);
+    --destructive: 0 84.2% 60.2%;  /* Keep for error states */
     --destructive-foreground: 210 40% 98%;
-    /* Border: #E5E7EB (Subtle Border) */
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 222.2 84% 4.9%;
+    --border: var(--c-soft);
+    --input: var(--c-soft);
+    --ring: var(--c-spark);
     --radius: 0.5rem;
     
-    /* Light Theme Additional Colors */
-    --bg-color: 220 14% 96%;  /* #F4F5F7 */
-    --card-bg: 0 0% 100%;     /* #FFFFFF */
-    --text-main: 222.2 84% 4.9%; /* #111827 */
-    --text-muted: 215.4 16.3% 46.9%; /* #6B7280 */
-    --border-color: 220 13% 91%; /* #E5E7EB */
+    /* Legacy color variables for backward compatibility */
+    --bg-color: var(--c-canvas);
+    --card-bg: transparent;  /* Overridden for Jet Black theme */
+    --text-main: var(--c-ink);
+    --text-muted: var(--c-muted);
+    --border-color: var(--c-soft);
     
-    /* Semantic Colors */
+    /* Semantic Colors (kept for specific use cases) */
     --success: 142 71% 45%;
     --success-bg: 142 71% 95%;
     --warning: 38 92% 50%;
@@ -46,15 +56,15 @@
     --info: 217 91% 60%;
     --info-bg: 217 91% 95%;
     
-  /* Animation Durations */
-  --duration-fast: 150ms;
-  --duration-normal: 200ms;
-  --duration-slow: 300ms;
-  --duration-slower: 500ms;
-  
-  /* Theme transition variables - optimized for speed and smoothness */
-  --theme-dur: 150ms;
-  --theme-ease: cubic-bezier(0.4, 0, 0.2, 1);
+    /* Animation Durations */
+    --duration-fast: 150ms;
+    --duration-normal: 200ms;
+    --duration-slow: 300ms;
+    --duration-slower: 500ms;
+    
+    /* Theme transition variables - liquid feel */
+    --theme-dur: 0.5s;
+    --theme-ease: ease;
     
     /* Z-Index Scale */
     --z-dropdown: 1000;
@@ -65,41 +75,6 @@
     --z-popover: 1060;
     --z-tooltip: 1070;
     --z-toast: 1080;
-  }
-
-  .dark {
-    /* Cinematic Dark Mode - Lexis Design System */
-    /* Background: #0a0a0c (Midnight Navy - warm undertone) */
-    --background: 240 9% 4%;
-    --foreground: 210 40% 98%;
-    /* Surface/Cards: #131316 (Slightly lighter than background) */
-    --card: 240 7% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 240 7% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 240 9% 4%;
-    --secondary: 240 7% 10%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 240 7% 10%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 240 7% 10%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 240 7% 12%;
-    --input: 240 7% 12%;
-    --ring: 212.7 26.8% 83.9%;
-    
-    /* Lexis Accent Colors */
-    --amber: 38 92% 60%; /* Reading lamp theme */
-    --violet: 270 80% 65%; /* AI/intelligence */
-  }
-  
-  /* Ensure CSS variables transition smoothly */
-  :root,
-  :root.dark {
-    transition: none; /* CSS variables change instantly */
   }
 }
 
@@ -151,17 +126,7 @@
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary/80 to-primary/60;
   }
   
-  .shadow-soft {
-    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 16px -4px rgba(0, 0, 0, 0.1);
-  }
-  
-  .shadow-elevated {
-    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 8px 24px -4px rgba(0, 0, 0, 0.12);
-  }
-  
-  .shadow-glow {
-    box-shadow: 0 0 20px -5px rgba(var(--primary-rgb, 59, 130, 246), 0.3);
-  }
+  /* Shadows removed per minimalist design system */
   
   .hover-lift {
     transition: transform 300ms ease-out;
@@ -257,37 +222,54 @@
     background-size: 20px 20px;
   }
   
-  /* Lexis Bento Card Component */
+  /* Lexis Bento Card Component - Minimalist: No fills, no shadows */
   .bento-card {
     border-radius: 24px;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border-color));
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    background: transparent;  /* No background fill - minimalist */
+    border: 1px solid var(--c-soft);
     position: relative;
     overflow: hidden;
   }
   
-  /* Dark mode: gradient border and top highlight */
-  .dark .bento-card {
-    border: 1px solid transparent;
-    background-image: 
-      linear-gradient(hsl(var(--card)), hsl(var(--card))),
-      linear-gradient(135deg, transparent, rgba(255,255,255,0.08), transparent);
-    background-origin: border-box;
-    background-clip: padding-box, border-box;
-    box-shadow: none;
+  /* Jet Black theme: Filled card backgrounds */
+  [data-theme="jet-black"] .bento-card,
+  [data-theme="jet-black"] .card {
+    background: #121212 !important;  /* Dark charcoal for cards */
+    border-color: rgba(156, 163, 175, 0.2) !important;  /* Subtle border */
   }
   
-  .dark .bento-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
-    z-index: 1;
+  /* Jet Black theme: Icon containers - use darker background and light icons */
+  [data-theme="jet-black"] .icon-container {
+    background: #1F1F1F !important;  /* Darker background for icon containers */
   }
+  
+  [data-theme="jet-black"] .icon-container svg,
+  [data-theme="jet-black"] .icon-container * {
+    color: #E7E9EA !important;  /* Light icon color for dark backgrounds */
+  }
+  
+  /* Jet Black theme: Light background containers with icons */
+  [data-theme="jet-black"] .bg-\[var\(--c-light\)\] {
+    background: #1F1F1F !important;
+  }
+  
+  [data-theme="jet-black"] .bg-\[var\(--c-light\)\] svg {
+    color: #E7E9EA !important;
+  }
+  
+  /* Allow tooltips to overflow when explicitly set */
+  .bento-card[style*="overflow: visible"],
+  .bento-card[style*="overflow:visible"] {
+    overflow: visible !important;
+  }
+  
+  /* Ensure tooltips can overflow parent containers */
+  [style*="overflow: visible"],
+  [style*="overflow:visible"] {
+    overflow: visible !important;
+  }
+  
+  /* Removed top border line for more minimal design */
   
   .bento-card::after {
     content: '';
@@ -303,13 +285,10 @@
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
   }
   
-  /* Glowing progress bar */
+  /* Progress bar - using palette colors */
   .glow-progress {
     height: 4px;
-    background: linear-gradient(90deg, 
-      hsl(38, 92%, 60%) 0%, 
-      hsl(270, 80%, 65%) 100%);
-    box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+    background: var(--c-spark);
     border-radius: 2px;
     transition: width 0.3s ease-out;
   }
@@ -349,6 +328,16 @@
   .book-spine:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset -2px 0 4px rgba(0,0,0,0.3);
   }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
   
   /* Mobile: smaller border radius */
   @media (max-width: 768px) {
@@ -362,8 +351,8 @@
     height: 80px;
     padding: 12px;
     border-radius: 12px;
-    border: 1px solid hsl(var(--border) / 0.3);
-    background: hsl(var(--card));
+    border: 1px solid var(--c-soft);
+    background: transparent;  /* No background fill - minimalist */
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
@@ -371,8 +360,14 @@
   }
   
   .recent-word-card:hover {
-    border-color: hsl(var(--border));
-    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05);
+    border-color: var(--c-soft);
+    opacity: 0.8;  /* Hover uses opacity, not new colors */
+  }
+  
+  /* Jet Black theme: Filled recent word cards */
+  [data-theme="jet-black"] .recent-word-card {
+    background: #121212 !important;
+    border-color: rgba(156, 163, 175, 0.2) !important;
   }
   
   /* Icon Container for Quick Actions */
@@ -552,10 +547,10 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Theme transitions - synchronized across major surfaces */
+/* Theme transitions - synchronized across major surfaces - liquid feel */
 html, body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background-color: var(--c-canvas);
+  color: var(--c-ink);
   transition:
     background-color var(--theme-dur) var(--theme-ease),
     color var(--theme-dur) var(--theme-ease);
@@ -566,12 +561,11 @@ html, body {
 
 /* Apply theme transitions to major "surfaces" only - synchronized timing */
 .theme-surface {
-  /* Theme color transitions - must be synchronized */
+  /* Theme color transitions - must be synchronized - liquid feel */
   transition:
     background-color var(--theme-dur) var(--theme-ease) 0s,
     color var(--theme-dur) var(--theme-ease) 0s,
     border-color var(--theme-dur) var(--theme-ease) 0s,
-    box-shadow var(--theme-dur) var(--theme-ease) 0s,
     fill var(--theme-dur) var(--theme-ease) 0s,
     stroke var(--theme-dur) var(--theme-ease) 0s;
   /* Optimize for smooth transitions */
@@ -624,14 +618,14 @@ button[title*="Toggle theme"] {
 
 /* Sophisticated Micro-Interactions */
 @layer utilities {
-  /* Hover lift with shadow - only transitions transform and box-shadow, not theme colors */
+  /* Hover lift - minimalist: no shadows */
   .hover-lift-smooth {
-    transition: transform 300ms ease-out, box-shadow 300ms ease-out;
+    transition: transform 300ms ease-out;
   }
   
   .hover-lift-smooth:hover {
     transform: translateY(-4px) scale(1.02);
-    box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.15);
+    opacity: 0.8;  /* Hover uses opacity, not shadows */
   }
   
   /* Subtle scale on interaction */
@@ -676,13 +670,13 @@ button[title*="Toggle theme"] {
     transform: translateY(-2px);
   }
   
-  /* Glow on hover */
+  /* Glow on hover - minimalist: opacity instead of shadow */
   .glow-hover {
     @apply transition-all duration-300;
   }
   
   .glow-hover:hover {
-    box-shadow: 0 0 20px -5px rgba(var(--primary-rgb, 59, 130, 246), 0.4);
+    opacity: 0.8;  /* Hover uses opacity, not shadows */
   }
   
   /* Shimmer loading effect */
@@ -760,17 +754,17 @@ button[title*="Toggle theme"] {
     }
   }
   
-  /* Pulse glow */
+  /* Pulse glow - minimalist: opacity animation instead of shadow */
   .pulse-glow {
     animation: pulseGlow 2s ease-in-out infinite;
   }
   
   @keyframes pulseGlow {
     0%, 100% {
-      box-shadow: 0 0 20px -5px rgba(var(--primary-rgb, 59, 130, 246), 0.3);
+      opacity: 1;
     }
     50% {
-      box-shadow: 0 0 30px -5px rgba(var(--primary-rgb, 59, 130, 246), 0.6);
+      opacity: 0.8;
     }
   }
   

@@ -4,9 +4,12 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Plus, BookOpen, Trash2, Heart } from "lucide-react"
+import { Plus, BookOpen, Trash2, Heart, MoreVertical } from "lucide-react"
 import Link from "next/link"
 import { toast } from "@/lib/toast"
+import { formatTitleCase } from "@/lib/utils"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Footer } from "@/components/footer"
 
 interface Book {
   id: string
@@ -235,7 +238,7 @@ export default function LibraryPage() {
     : books.filter(book => book.category === selectedCategory)
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-4rem-8rem)]">
       {/* Header */}
       <div className="mb-10 lg:mb-12 fade-in">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
@@ -245,8 +248,8 @@ export default function LibraryPage() {
                 Your Collection
               </span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">My Library</h1>
-            <p className="text-lg text-muted-foreground">
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight font-serif">My Library</h1>
+            <p className="text-lg text-muted-foreground mb-1">
               {filteredBooks.length === 0 ? (
                 "Start building your collection"
               ) : (
@@ -254,6 +257,9 @@ export default function LibraryPage() {
                   {filteredBooks.length} {filteredBooks.length === 1 ? "treasure" : "treasures"} waiting to be explored
                 </>
               )}
+            </p>
+            <p className="text-sm text-muted-foreground/70 italic">
+              Your reading companion for learning English
             </p>
           </div>
           <Button 
@@ -407,25 +413,30 @@ export default function LibraryPage() {
       )}
 
       {filteredBooks.length === 0 ? (
-        <Card className="border-dashed">
+        <Card className="border border-border/50">
           <CardContent className="py-16 text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 mb-5 pulse-subtle">
-              <BookOpen className="h-10 w-10 text-primary/60" />
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--c-light)] mb-5 pulse-subtle">
+              <BookOpen className="h-10 w-10 text-[var(--c-soft)]" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">
+            <h3 className="text-xl font-semibold mb-2 font-serif">
               {books.length === 0 
                 ? `Your ${selectedCategory === "note" ? "notes" : "library"} is empty`
                 : `No ${selectedCategory === "note" ? "notes" : "books"} in this category`}
             </h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            <p className="text-muted-foreground mb-4 max-w-md mx-auto">
               {books.length === 0 
                 ? `Every great reading journey begins with a single ${selectedCategory === "note" ? "note" : "book"}. Add your first one to start learning.`
                 : `Try switching to a different category or add a new ${selectedCategory === "note" ? "note" : "book"}.`}
             </p>
+            {books.length === 0 && (
+              <p className="text-sm text-muted-foreground/70 mb-6 max-w-md mx-auto italic">
+                Your reading companion for learning English
+              </p>
+            )}
             <Button 
               onClick={() => setShowForm(true)} 
               size="default" 
-              className="font-medium shadow-soft hover:shadow-elevated transition-all"
+              className="font-medium"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Your First {selectedCategory === "note" ? "Note" : "Book"}
@@ -433,62 +444,77 @@ export default function LibraryPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 fade-in-delay">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-delay">
           {filteredBooks.map((book, index) => (
             <Card 
               key={book.id} 
-              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth bento-card"
+              className="group hover:shadow-elevated transition-[transform,box-shadow] duration-300 border-border/50 hover:border-border interactive-scale hover-lift-smooth bento-card flex flex-col"
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              {/* Book Cover Placeholder - Top 80% */}
-              <div className="aspect-[3/4] bg-gradient-to-br from-amber/20 to-violet/20 flex items-center justify-center mb-3 rounded-t-3xl">
-                <BookOpen className="h-16 w-16 text-amber/60" />
-              </div>
-              {/* Title and Progress - Bottom 20% */}
-              <CardHeader className="pb-3 pt-0">
-                <CardTitle className="line-clamp-2 text-base font-semibold group-hover:text-primary transition-colors duration-300 mb-2">
-                  {book.title}
-                </CardTitle>
-                {/* Progress Bar Placeholder */}
-                <div className="h-1 bg-muted rounded-full overflow-hidden">
-                  <div className="glow-progress" style={{ width: '0%' }}></div>
+              <CardHeader className="pb-4 pt-5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-md bg-[var(--c-light)] flex items-center justify-center">
+                      <BookOpen className="h-5 w-5 text-[var(--c-soft)]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="line-clamp-2 text-base font-semibold group-hover:text-primary transition-colors duration-300 mb-1">
+                        {formatTitleCase(book.title)}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {book.category === "note" ? "Note" : "Book"}
+                      </p>
+                    </div>
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="p-1.5 rounded-md hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-40 p-1" align="end">
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(book.id)
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2 pt-0">
+              <CardContent className="space-y-3 pt-0 pb-5 flex-1 flex flex-col justify-end">
                 <Link href={`/reader/${book.id}`}>
-                  <Button className="w-full font-medium shadow-soft hover:shadow-elevated transition-all">
+                  <Button className="w-full font-medium">
                     Open {book.category === "note" ? "Note" : "Book"}
                   </Button>
                 </Link>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAddToWishlist(book)}
-                    disabled={addingToWishlist === book.id}
-                    data-book-id={book.id}
-                    className="transition-all hover:bg-accent/50"
-                  >
-                    <Heart className="h-3.5 w-3.5 mr-1.5" />
-                    {addingToWishlist === book.id ? "Adding..." : "Wishlist"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDelete(book.id)}
-                    disabled={deleting === book.id}
-                    className="transition-all hover:bg-destructive/90"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {deleting === book.id ? "..." : "Delete"}
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddToWishlist(book)}
+                  disabled={addingToWishlist === book.id}
+                  data-book-id={book.id}
+                  className="w-full transition-all hover:bg-accent/50"
+                >
+                  <Heart className="h-3.5 w-3.5 mr-1.5" />
+                  {addingToWishlist === book.id ? "Adding..." : "Wishlist"}
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
         </div>
+      </div>
+      <div className="mt-auto">
+        <Footer />
       </div>
     </div>
   )

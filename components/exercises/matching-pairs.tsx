@@ -91,7 +91,7 @@ export function MatchingPairsExercise({ exercise, onAnswer }: MatchingPairsProps
       <CardHeader>
         <CardTitle className="text-xl">{exercise.question}</CardTitle>
         <CardDescription className="mt-2">
-          Tap a word and its translation to match them. {matchedPairs.size / 2} / {exercise.pairs.length} matched
+          Tap pairs to match them. Matches: {matchedPairs.size / 2} of {exercise.pairs.length}
         </CardDescription>
       </CardHeader>
       <CardContent>
