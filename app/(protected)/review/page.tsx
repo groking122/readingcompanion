@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useReducer } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { RotateCcw, Loader2 } from "lucide-react"
@@ -11,6 +11,42 @@ import {
   type Exercise,
   type VocabularyItem 
 } from "@/lib/exercises"
+
+// Exercise state machine
+type ExerciseState = 
+  | { type: 'loading' }
+  | { type: 'ready', exercise: Exercise, isMatchingPairs: boolean, flashcardIds: string[] }
+  | { type: 'error', error: string, retryable: boolean }
+
+type ExerciseAction =
+  | { type: 'GENERATE_START' }
+  | { type: 'GENERATE_SUCCESS', exercise: Exercise, isMatchingPairs: boolean, flashcardIds: string[] }
+  | { type: 'GENERATE_ERROR', error: string, retryable: boolean }
+  | { type: 'RESET' }
+
+function exerciseReducer(state: ExerciseState, action: ExerciseAction): ExerciseState {
+  switch (action.type) {
+    case 'GENERATE_START':
+      return { type: 'loading' }
+    case 'GENERATE_SUCCESS':
+      return {
+        type: 'ready',
+        exercise: action.exercise,
+        isMatchingPairs: action.isMatchingPairs,
+        flashcardIds: action.flashcardIds,
+      }
+    case 'GENERATE_ERROR':
+      return {
+        type: 'error',
+        error: action.error,
+        retryable: action.retryable,
+      }
+    case 'RESET':
+      return { type: 'loading' }
+    default:
+      return state
+  }
+}
 import { MeaningInContextExercise } from "@/components/exercises/meaning-in-context"
 import { ClozeBlankExercise } from "@/components/exercises/cloze-blank"
 import { ReverseMcqExercise } from "@/components/exercises/reverse-mcq"
@@ -40,21 +76,133 @@ export default function ReviewPage() {
   const [flashcards, setFlashcards] = useState<Flashcard[]>([])
   const [allVocab, setAllVocab] = useState<VocabularyItem[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [currentExercise, setCurrentExercise] = useState<Exercise | null>(null)
-  const [isMatchingPairs, setIsMatchingPairs] = useState(false)
+  const [exerciseState, dispatchExercise] = useReducer(exerciseReducer, { type: 'loading' })
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const [consumedFlashcards, setConsumedFlashcards] = useState(0) // Track consumed flashcards for progress
+  const [lockedAttemptId, setLockedAttemptId] = useState<string | null>(null) // Prevent double-submit
+  const [sessionStartedAt] = useState<string>(new Date().toISOString()) // Track session start for concurrency
+  
+  // Derived state from exercise state machine
+  const currentExercise = exerciseState.type === 'ready' ? exerciseState.exercise : null
+  const isMatchingPairs = exerciseState.type === 'ready' ? exerciseState.isMatchingPairs : false
+  const matchingPairsFlashcardIds = exerciseState.type === 'ready' ? exerciseState.flashcardIds : []
 
   useEffect(() => {
     fetchDueFlashcards()
     fetchAllVocab()
   }, [])
 
-  useEffect(() => {
-    if (flashcards.length > 0 && allVocab.length > 0) {
-      generateCurrentExercise()
+  const generateCurrentExercise = useCallback(() => {
+    if (flashcards.length === 0 || allVocab.length === 0) {
+      dispatchExercise({ type: 'GENERATE_START' })
+      return
+    }
+
+    const current = flashcards[currentIndex]
+    if (!current) {
+      dispatchExercise({ type: 'GENERATE_ERROR', error: 'No flashcard at current index', retryable: false })
+      return
+    }
+
+    dispatchExercise({ type: 'GENERATE_START' })
+
+    try {
+      // Every 5th exercise (after first block), show matching pairs (if we have enough items)
+      // Trigger after first block: (currentIndex + 1) % 5 === 0 means we're at index 4, 9, 14, etc.
+      if (currentIndex > 0 && (currentIndex + 1) % 5 === 0 && flashcards.length - currentIndex >= 5) {
+        const itemsForMatching = flashcards
+          .slice(currentIndex, currentIndex + 5)
+          .map(fc => ({
+            id: fc.vocabulary.id,
+            term: fc.vocabulary.term,
+            termNormalized: fc.vocabulary.termNormalized,
+            translation: fc.vocabulary.translation,
+            context: fc.vocabulary.context,
+            kind: fc.vocabulary.kind || "word" as const,
+            bookId: fc.vocabulary.bookId,
+          }))
+        
+        if (itemsForMatching.length === 5) {
+          const matchingExercise = generateMatchingPairsExercise(itemsForMatching)
+          // Verify we have exactly 5 pairs (no duplicates filtered out)
+          if (matchingExercise && matchingExercise.pairs.length === 5) {
+            // Map flashcard IDs to the vocabulary IDs that were actually selected
+            // Create a map from vocabulary ID to flashcard ID
+            const vocabToFlashcardMap = new Map(
+              flashcards
+                .slice(currentIndex, currentIndex + 5)
+                .map(fc => [fc.vocabulary.id, fc.flashcard.id])
+            )
+            // Get flashcard IDs for the selected pairs
+            const flashcardIds = matchingExercise.pairs
+              .map(pair => vocabToFlashcardMap.get(pair.id))
+              .filter((id): id is string => id !== undefined)
+            
+            // Only proceed if we have exactly 5 flashcard IDs
+            if (flashcardIds.length === 5) {
+              dispatchExercise({
+                type: 'GENERATE_SUCCESS',
+                exercise: matchingExercise,
+                isMatchingPairs: true,
+                flashcardIds,
+              })
+              return
+            }
+          }
+        }
+        // If matching fails or doesn't have exactly 5 pairs, fall through to regular exercise
+      }
+
+      // Regular exercise for single vocabulary item
+      const vocabItem: VocabularyItem = {
+        id: current.vocabulary.id,
+        term: current.vocabulary.term,
+        termNormalized: current.vocabulary.termNormalized,
+        translation: current.vocabulary.translation,
+        context: current.vocabulary.context,
+        kind: current.vocabulary.kind || "word",
+        bookId: current.vocabulary.bookId,
+      }
+
+      const exercise = generateExercise(
+        vocabItem,
+        allVocab,
+        undefined,
+        current.flashcard.repetitions
+      )
+      
+      // If exercise generation fails, show error state
+      if (exercise) {
+        dispatchExercise({
+          type: 'GENERATE_SUCCESS',
+          exercise,
+          isMatchingPairs: false,
+          flashcardIds: [],
+        })
+      } else {
+        // Fallback: exercise generation failed, but retryable
+        dispatchExercise({
+          type: 'GENERATE_ERROR',
+          error: 'Failed to generate exercise',
+          retryable: true,
+        })
+      }
+    } catch (error) {
+      dispatchExercise({
+        type: 'GENERATE_ERROR',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        retryable: true,
+      })
     }
   }, [flashcards, allVocab, currentIndex])
+
+  useEffect(() => {
+    if (flashcards.length > 0 && allVocab.length > 0) {
+      dispatchExercise({ type: 'RESET' })
+      generateCurrentExercise()
+    }
+  }, [flashcards, allVocab, currentIndex, generateCurrentExercise])
 
   const fetchDueFlashcards = async () => {
     try {
@@ -62,6 +210,7 @@ export default function ReviewPage() {
       const data = await res.json()
       setFlashcards(data)
       setCurrentIndex(0)
+      setConsumedFlashcards(0) // Reset consumed count when fetching new flashcards
     } catch (error) {
       console.error("Error fetching flashcards:", error)
     } finally {
@@ -91,65 +240,6 @@ export default function ReviewPage() {
     }
   }
 
-  const generateCurrentExercise = () => {
-    if (flashcards.length === 0 || allVocab.length === 0) return
-
-    const current = flashcards[currentIndex]
-    if (!current) return
-
-    // Every 5th exercise, show matching pairs (if we have enough items)
-    if (currentIndex % 5 === 0 && flashcards.length >= 5) {
-      const itemsForMatching = flashcards
-        .slice(currentIndex, currentIndex + 5)
-        .map(fc => ({
-          id: fc.vocabulary.id,
-          term: fc.vocabulary.term,
-          termNormalized: fc.vocabulary.termNormalized,
-          translation: fc.vocabulary.translation,
-          context: fc.vocabulary.context,
-          kind: fc.vocabulary.kind || "word" as const,
-          bookId: fc.vocabulary.bookId,
-        }))
-      
-      if (itemsForMatching.length >= 5) {
-        const matchingExercise = generateMatchingPairsExercise(itemsForMatching)
-        if (matchingExercise) {
-          setCurrentExercise(matchingExercise)
-          setIsMatchingPairs(true)
-          return
-        }
-        // If matching fails, fall through to regular exercise
-      }
-    }
-
-    // Regular exercise for single vocabulary item
-    const vocabItem: VocabularyItem = {
-      id: current.vocabulary.id,
-      term: current.vocabulary.term,
-      termNormalized: current.vocabulary.termNormalized,
-      translation: current.vocabulary.translation,
-      context: current.vocabulary.context,
-      kind: current.vocabulary.kind || "word",
-      bookId: current.vocabulary.bookId,
-    }
-
-    const exercise = generateExercise(
-      vocabItem,
-      allVocab,
-      undefined,
-      current.flashcard.repetitions
-    )
-    
-    // If exercise generation fails, we'll show flashcard fallback
-    if (exercise) {
-      setCurrentExercise(exercise)
-      setIsMatchingPairs(false)
-    } else {
-      // Fallback: use flashcard mode (will be handled in render)
-      setCurrentExercise(null)
-      setIsMatchingPairs(false)
-    }
-  }
 
   const convertAnswerToQuality = (isCorrect: boolean, timeMs: number): number => {
     if (!isCorrect) return 0 // Again
@@ -162,31 +252,79 @@ export default function ReviewPage() {
     return 4 // Good
   }
 
-  const handleExerciseAnswer = async (isCorrect: boolean, timeMs: number) => {
-    if (isMatchingPairs && currentExercise) {
-      // For matching pairs, update all 5 flashcards
-      const ids = currentExercise.vocabularyId.split(",")
-      const quality = convertAnswerToQuality(isCorrect, timeMs)
+  const handleExerciseAnswer = async (
+    isCorrectOrQualities: boolean | Array<{ flashcardId: string; quality: number; responseMs: number }>,
+    timeMs?: number
+  ) => {
+    // Generate attempt ID to prevent double-submit
+    const attemptId = `${isMatchingPairs ? 'matching' : 'single'}-${currentIndex}-${Date.now()}`
+    
+    // Check if already processing this attempt
+    if (lockedAttemptId === attemptId || updating) {
+      return // Already processing, ignore duplicate submission
+    }
+    
+    setLockedAttemptId(attemptId)
+    
+    // Check if this is per-item quality array (matching pairs) or single answer
+    const isPerItemQuality = Array.isArray(isCorrectOrQualities)
+    
+    if (isMatchingPairs && isPerItemQuality && matchingPairsFlashcardIds.length > 0) {
+      // For matching pairs with per-item quality tracking
+      const itemQualities = isCorrectOrQualities as Array<{ flashcardId: string; quality: number; responseMs: number }>
+      const totalTimeMs = timeMs || 0
       
       setUpdating(true)
       try {
-        // Update all flashcards in the matching pair
-        for (const id of ids) {
-          const flashcard = flashcards.find(fc => fc.vocabulary.id === id)
-          if (flashcard) {
-            await fetch("/api/flashcards", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                flashcardId: flashcard.flashcard.id,
-                quality,
-              }),
-            })
-          }
+        const sessionId = `session-${sessionStartedAt}`
+        const batchAttemptId = `batch-${attemptId}`
+        
+        const response = await fetch("/api/reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            attemptId: batchAttemptId,
+            sessionStartedAt,
+            items: itemQualities.map(item => ({
+              flashcardId: item.flashcardId,
+              quality: item.quality,
+              responseMs: item.responseMs,
+              exerciseType: "matching-pairs",
+            })),
+          }),
+        })
+
+        if (response.status === 409) {
+          // Session out of sync - refresh and show message
+          const errorData = await response.json()
+          console.warn("Session out of sync:", errorData)
+          alert("Your session is out of sync. Refreshing...")
+          await fetchDueFlashcards()
+          setLockedAttemptId(null)
+          setUpdating(false)
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(`Batch update failed: ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        
+        // Check if all updates succeeded
+        const failed = result.results?.filter((r: any) => !r.success) || []
+        if (failed.length > 0) {
+          console.error("Some flashcards failed to update:", failed)
+          // Still proceed, but log the error
         }
         
-        // Move forward by 5 (or remaining)
-        const nextIndex = Math.min(currentIndex + 5, flashcards.length)
+        // Update consumed count
+        const consumed = matchingPairsFlashcardIds.length
+        setConsumedFlashcards(prev => prev + consumed)
+        
+        // Move forward by the number of flashcards consumed
+        const nextIndex = currentIndex + consumed
         if (nextIndex >= flashcards.length) {
           await fetchDueFlashcards()
         } else {
@@ -194,26 +332,52 @@ export default function ReviewPage() {
         }
       } catch (error) {
         console.error("Error updating flashcards:", error)
+        alert("Failed to save progress. Please try again.")
       } finally {
         setUpdating(false)
+        setLockedAttemptId(null)
       }
     } else {
       // Single exercise
       const current = flashcards[currentIndex]
-      if (!current) return
+      if (!current) {
+        setLockedAttemptId(null)
+        return
+      }
 
-      const quality = convertAnswerToQuality(isCorrect, timeMs)
+      const isCorrect = isCorrectOrQualities as boolean
+      const singleTimeMs = timeMs || 0
+      const quality = convertAnswerToQuality(isCorrect, singleTimeMs)
       
       setUpdating(true)
       try {
-        await fetch("/api/flashcards", {
+        const response = await fetch("/api/flashcards", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             flashcardId: current.flashcard.id,
             quality,
+            sessionStartedAt,
           }),
         })
+
+        if (response.status === 409) {
+          // Session out of sync - refresh and show message
+          const errorData = await response.json()
+          console.warn("Session out of sync:", errorData)
+          alert("Your session is out of sync. Refreshing...")
+          await fetchDueFlashcards()
+          setLockedAttemptId(null)
+          setUpdating(false)
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error(`Update failed: ${response.statusText}`)
+        }
+
+        // Update consumed count
+        setConsumedFlashcards(prev => prev + 1)
 
         // Move to next card or refresh if done
         if (currentIndex < flashcards.length - 1) {
@@ -225,6 +389,7 @@ export default function ReviewPage() {
         console.error("Error updating flashcard:", error)
       } finally {
         setUpdating(false)
+        setLockedAttemptId(null)
       }
     }
   }
@@ -275,6 +440,49 @@ export default function ReviewPage() {
     )
   }
 
+  // Handle exercise state machine states
+  if (exerciseState.type === 'loading') {
+    return (
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+            </div>
+            <p className="text-muted-foreground font-medium">Preparing your next exercise...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (exerciseState.type === 'error') {
+    return (
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+          <div className="flex flex-col items-center gap-4 max-w-md">
+            <p className="text-muted-foreground font-medium text-center">{exerciseState.error}</p>
+            {exerciseState.retryable && (
+              <Button
+                onClick={() => {
+                  dispatchExercise({ type: 'RESET' })
+                  generateCurrentExercise()
+                }}
+              >
+                Retry
+              </Button>
+            )}
+            {!exerciseState.retryable && (
+              <Button onClick={() => setCurrentIndex(prev => prev + 1)}>
+                Skip to Next
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!currentExercise) {
     return (
       <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
@@ -310,7 +518,8 @@ export default function ReviewPage() {
       return (
         <MatchingPairsExercise
           exercise={currentExercise as Exercise & { pairs: Array<{ term: string; translation: string; id: string }> }}
-          onAnswer={handleExerciseAnswer}
+          flashcardIds={matchingPairsFlashcardIds}
+          onAnswer={(itemQualities, totalTimeMs) => handleExerciseAnswer(itemQualities, totalTimeMs)}
         />
       )
     }
@@ -347,7 +556,12 @@ export default function ReviewPage() {
     }
   }
 
-  const progressPercentage = ((currentIndex + 1) / flashcards.length) * 100
+  // Calculate progress based on consumed flashcards only (not including current exercise)
+  // consumedFlashcards tracks completed exercises
+  const progressPercentage = flashcards.length > 0 ? (consumedFlashcards / flashcards.length) * 100 : 0
+  // Exercise number shows current position (completed + 1 for current)
+  const currentExerciseCount = isMatchingPairs ? matchingPairsFlashcardIds.length : 1
+  const currentExerciseNumber = consumedFlashcards + 1
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition overflow-y-auto flex flex-col">
@@ -356,7 +570,7 @@ export default function ReviewPage() {
         <div className="w-full max-w-2xl mb-6 fade-in">
           <div className="flex items-center justify-between mb-4">
             <div className="text-sm text-muted-foreground">
-              Exercise {currentIndex + 1} of {flashcards.length}
+              Exercise {currentExerciseNumber} of {flashcards.length}
             </div>
             {/* Progress Bar */}
             <div className="flex-1 mx-4 bg-muted/50 rounded-full h-1.5 overflow-hidden">

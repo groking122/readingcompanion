@@ -65,6 +65,16 @@ export function uniqBy<T>(arr: T[], key: (x: T) => string): T[] {
   return out
 }
 
+// Fisher-Yates shuffle for unbiased random shuffling
+export function fisherYatesShuffle<T>(array: T[]): T[] {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
 // Check if choices are ambiguous (duplicate normalized values)
 export function isAmbiguousGreekChoices(choices: string[]): boolean {
   const norm = choices.map(normalizeGreek)
@@ -131,9 +141,22 @@ export function generateDistractors(
         score += 5
       }
       
-      // Same kind: +3
+      // Same kind (word/phrase): +3
+      // Note: Future enhancement - if POS (part-of-speech) data is available,
+      // prefer same POS (noun/noun, verb/verb) to prevent obvious distractors
       if (item.kind === currentItem.kind) {
         score += 3
+      }
+      
+      // Additional filtering: prefer similar word count for phrases
+      // This helps ensure distractors are plausible (e.g., "take care" vs "take a break" not "take")
+      if (currentItem.kind === "phrase" && item.kind === "phrase") {
+        const currentWords = currentItem.translation.split(/\s+/).length
+        const itemWords = item.translation.split(/\s+/).length
+        const wordDiff = Math.abs(currentWords - itemWords)
+        if (wordDiff <= 1) {
+          score += 2 // Prefer phrases with similar word count
+        }
       }
       
       // Similar length: +2
@@ -181,9 +204,9 @@ export function generateDistractors(
                !transNorm.includes(correctNorm)
       })
       .map(item => item.translation)
-      .sort(() => Math.random() - 0.5)
     
-    for (const trans of remaining) {
+    const shuffledRemaining = fisherYatesShuffle(remaining)
+    for (const trans of shuffledRemaining) {
       if (distractors.length >= count) break
       const transNorm = normalizeGreek(trans)
       if (!used.has(transNorm)) {
@@ -229,7 +252,7 @@ export function generateMeaningInContextExercise(
   }
   
   // Shuffle options
-  allOptions = allOptions.sort(() => Math.random() - 0.5)
+  allOptions = fisherYatesShuffle(allOptions)
   
   // Highlight the term in context
   const highlightedContext = vocab.context.replace(
@@ -314,10 +337,9 @@ export function generateClozeBlankExercise(
         return !used.has(termNorm)
       })
       .map(item => item.term)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3 - distractors.length)
     
-    for (const term of remaining) {
+    const shuffledRemaining = fisherYatesShuffle(remaining).slice(0, 3 - distractors.length)
+    for (const term of shuffledRemaining) {
       const termNorm = normalizeBase(term)
       if (!used.has(termNorm)) {
         distractors.push(term)
@@ -334,7 +356,7 @@ export function generateClozeBlankExercise(
   }
   
   // Shuffle
-  const shuffledOptions = allOptions.sort(() => Math.random() - 0.5)
+  const shuffledOptions = fisherYatesShuffle(allOptions)
   
   return {
     type: "cloze-blank",
@@ -390,10 +412,9 @@ export function generateReverseMcqExercise(
         return !used.has(termNorm)
       })
       .map(item => item.term)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3 - distractors.length)
     
-    for (const term of remaining) {
+    const shuffledRemaining = fisherYatesShuffle(remaining).slice(0, 3 - distractors.length)
+    for (const term of shuffledRemaining) {
       const termNorm = normalizeBase(term)
       if (!used.has(termNorm)) {
         distractors.push(term)
@@ -410,7 +431,7 @@ export function generateReverseMcqExercise(
   }
   
   // Shuffle
-  const shuffledOptions = allOptions.sort(() => Math.random() - 0.5)
+  const shuffledOptions = fisherYatesShuffle(allOptions)
   
   return {
     type: "reverse-mcq",
@@ -436,13 +457,13 @@ export function generateMatchingPairsExercise(
   const uniqueByTerm = uniqBy(vocabList, item => normalizeBase(item.term))
   const uniqueByTranslation = uniqBy(uniqueByTerm, item => normalizeGreek(item.translation))
   
-  // Need at least 4 items for matching (5 is ideal)
-  const minItems = 4
+  // Require exactly 5 items for matching pairs
+  const minItems = 5
   if (uniqueByTranslation.length < minItems) {
     return null // Not enough unique items
   }
   
-  // Take up to 5 unique items
+  // Take exactly 5 unique items
   const selected = uniqueByTranslation.slice(0, 5)
   
   const pairs = selected.map(item => ({
@@ -460,8 +481,8 @@ export function generateMatchingPairsExercise(
   }
   
   // Shuffle both columns
-  const shuffledTerms = [...pairs].sort(() => Math.random() - 0.5)
-  const shuffledTranslations = [...pairs].sort(() => Math.random() - 0.5)
+  const shuffledTerms = fisherYatesShuffle([...pairs])
+  const shuffledTranslations = fisherYatesShuffle([...pairs])
   
   const exercise: Exercise & { pairs: typeof pairs } = {
     type: "matching-pairs",

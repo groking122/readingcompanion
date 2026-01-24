@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { db } from "@/db"
 import { flashcards, vocabulary } from "@/db/schema"
-import { eq, and, lte, desc } from "drizzle-orm"
+import { eq, and, lte, asc } from "drizzle-orm"
 import { updateCard } from "@/lib/sm2"
 
 export async function GET(request: NextRequest) {
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       .from(flashcards)
       .innerJoin(vocabulary, eq(flashcards.vocabularyId, vocabulary.id))
       .where(conditions)
-      .orderBy(desc(flashcards.dueAt))
+      .orderBy(asc(flashcards.dueAt), asc(flashcards.lastReviewedAt))
     return NextResponse.json(results)
   } catch (error) {
     console.error("Error fetching flashcards:", error)
@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { flashcardId, quality } = body
+    const { flashcardId, quality, sessionStartedAt } = body
 
     if (!flashcardId || quality === undefined) {
       return NextResponse.json(
@@ -72,6 +72,23 @@ export async function PATCH(request: NextRequest) {
         { error: "Flashcard not found" },
         { status: 404 }
       )
+    }
+
+    // Check for concurrency conflicts if sessionStartedAt is provided
+    if (sessionStartedAt) {
+      const sessionStartTime = new Date(sessionStartedAt)
+      if (
+        currentFlashcard.lastReviewedAt &&
+        currentFlashcard.lastReviewedAt > sessionStartTime
+      ) {
+        return NextResponse.json(
+          {
+            error: "Session out of sync",
+            message: "Flashcard was updated by another session",
+          },
+          { status: 409 }
+        )
+      }
     }
 
     // Update using SM-2 algorithm

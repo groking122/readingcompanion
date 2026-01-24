@@ -49,11 +49,25 @@ export function updateCard(card: SM2Card, quality: number): SM2Result {
     } else {
       interval = Math.round(interval * easeFactor);
     }
+    
+    // Prevent interval regression on correct answers (ease factor floor protection)
+    // Don't reduce interval if the answer was correct (quality >= 3)
+    if (interval < card.interval) {
+      interval = card.interval;
+    }
   }
 
-  // Calculate next review date
-  const nextReview = new Date();
-  nextReview.setDate(nextReview.getDate() + interval);
+  // Boost ease factor for consecutive perfect answers (quality === 5)
+  // Track this via a streak mechanism (simplified: if quality is 5, slightly boost)
+  // Note: Full streak tracking would require additional state, but this helps prevent ease hell
+  if (quality === 5 && repetitions >= 3) {
+    // Slight boost to ease factor for consistent excellent performance
+    easeFactor = Math.min(easeFactor * 1.05, 2.5); // Cap at initial ease factor
+  }
+
+  // Calculate next review date using UTC epoch math to avoid DST issues
+  // Convert interval (days) to milliseconds and add to current UTC time
+  const nextReview = new Date(Date.now() + interval * 86400 * 1000);
 
   return {
     easeFactor,
