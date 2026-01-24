@@ -15,6 +15,13 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Lexis",
   description: "The smart way to learn English through reading. Instant Greek translations, vocabulary tracking, and adaptive flashcards help you learn naturally.",
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/icon.svg',
+  },
 }
 
 export default function RootLayout({

@@ -29,13 +29,20 @@ export function Nav() {
 
   return (
     <>
-      <nav className="theme-surface sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
+      <nav 
+        className="theme-surface sticky top-0 z-50 w-full backdrop-blur-sm overflow-hidden !border-0"
+        style={{ 
+          backgroundColor: 'color-mix(in srgb, var(--c-canvas) 85%, var(--c-ink) 15%)',
+          outline: 'none',
+          boxShadow: 'none'
+        }}
+      >
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8" style={{ border: 'none', outline: 'none' }}>
           {/* Logo - Left */}
           <div className="flex items-center">
             <Link 
               href="/" 
-              className="text-lg font-serif font-bold tracking-tight transition-all duration-300 hover:text-primary md:text-xl bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent hover:scale-105 inline-block cursor-pointer"
+              className="text-lg font-serif font-bold tracking-tight transition-all duration-300 hover:opacity-90 md:text-xl relative cursor-pointer logo-glow bg-gradient-to-r from-white via-white to-gray-300 bg-clip-text text-transparent"
             >
               Lexis
             </Link>
@@ -59,11 +66,12 @@ export function Nav() {
                   <span className="relative">
                     {item.label}
                     {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--c-spark)] rounded-full" />
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--c-spark)] rounded-full z-10" />
                     )}
-                    {!isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--c-soft)]/30 scale-x-0 group-hover:scale-x-100 transition-transform duration-200 rounded-full" />
-                    )}
+                    <span className={cn(
+                      "absolute bottom-0 left-1/2 h-0.5 w-0 bg-[var(--c-soft)]/50 -translate-x-1/2 group-hover:w-full transition-all duration-300 ease-out rounded-full",
+                      isActive && "group-hover:bg-[var(--c-spark)]/50"
+                    )} />
                   </span>
                 </Link>
               )
@@ -71,7 +79,7 @@ export function Nav() {
           </div>
           
           {/* Right Side - Mobile Menu & Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" style={{ border: 'none', outline: 'none' }}>
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"

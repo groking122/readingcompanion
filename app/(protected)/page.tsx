@@ -284,7 +284,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto page-transition" style={{ overflow: 'visible' }}>
+    <div className="max-w-7xl mx-auto page-transition" style={{ overflow: 'visible', border: 'none', outline: 'none' }}>
       {/* Header Section - Personal Greeting */}
       <div className="relative mb-8 lg:mb-12">
         {/* Subtle mesh gradient from top-right - removed, using solid colors */}
