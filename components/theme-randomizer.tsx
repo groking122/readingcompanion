@@ -63,17 +63,18 @@ export function ThemeRandomizer() {
       disabled={isBlackWhite || !cycleTheme}
       className={cn(
         "h-9 w-9 rounded-lg",
-        "border border-[var(--c-soft)]",
-        "bg-transparent",
-        "text-[var(--c-ink)]",
+        "border border-white/20",
+        "bg-white/5",
+        "text-white",
         "flex items-center justify-center",
         "transition-all duration-300 ease-in-out",
-        "hover:rotate-180 hover:opacity-80",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-spark)] focus-visible:ring-offset-2",
+        "hover:rotate-180 hover:bg-white/10 hover:border-white/30",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
         "active:scale-90",
         "cursor-pointer",
         "relative z-10",
-        "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:rotate-0 disabled:hover:opacity-50",
+        "backdrop-blur-sm",
+        "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:rotate-0 disabled:hover:bg-white/5 disabled:hover:border-white/20",
         isAnimating && "animate-pulse"
       )}
       aria-label="Cycle through color themes"

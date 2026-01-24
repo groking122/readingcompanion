@@ -30,9 +30,12 @@ export function Nav() {
   return (
     <>
       <nav 
-        className="theme-surface sticky top-0 z-50 w-full backdrop-blur-sm overflow-hidden !border-0"
+        className="theme-surface sticky top-0 z-50 w-full overflow-hidden !border-0"
         style={{ 
-          backgroundColor: 'color-mix(in srgb, var(--c-canvas) 85%, var(--c-ink) 15%)',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
           outline: 'none',
           boxShadow: 'none'
         }}
@@ -42,7 +45,11 @@ export function Nav() {
           <div className="flex items-center">
             <Link 
               href="/" 
-              className="text-lg font-serif font-bold tracking-tight transition-all duration-300 hover:opacity-90 md:text-xl relative cursor-pointer logo-glow bg-gradient-to-r from-white via-white to-gray-300 bg-clip-text text-transparent"
+              className="text-lg font-serif font-bold tracking-tight transition-all duration-300 hover:opacity-80 md:text-xl relative cursor-pointer"
+              style={{
+                color: '#ffffff',
+                textShadow: '0 0 20px rgba(255, 255, 255, 0.3)'
+              }}
             >
               Lexis
             </Link>
@@ -59,18 +66,18 @@ export function Nav() {
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 relative group",
                     isActive
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "text-white"
+                      : "text-gray-400 hover:text-white"
                   )}
                 >
                   <span className="relative">
                     {item.label}
                     {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--c-spark)] rounded-full z-10" />
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full z-10" />
                     )}
                     <span className={cn(
-                      "absolute bottom-0 left-1/2 h-0.5 w-0 bg-[var(--c-soft)]/50 -translate-x-1/2 group-hover:w-full transition-all duration-300 ease-out rounded-full",
-                      isActive && "group-hover:bg-[var(--c-spark)]/50"
+                      "absolute bottom-0 left-1/2 h-0.5 w-0 bg-white/30 -translate-x-1/2 group-hover:w-full transition-all duration-300 ease-out rounded-full",
+                      isActive && "group-hover:bg-white/50"
                     )} />
                   </span>
                 </Link>
@@ -85,7 +92,7 @@ export function Nav() {
               variant="ghost"
               size="sm"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden h-9 w-9 p-0"
+              className="md:hidden h-9 w-9 p-0 text-white hover:bg-white/10"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
@@ -95,7 +102,7 @@ export function Nav() {
               )}
             </Button>
             {/* Theme Controls */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <ThemeToggle />
               <ThemeRandomizer />
             </div>

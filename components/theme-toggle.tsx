@@ -37,14 +37,15 @@ export function ThemeToggle() {
       onClick={handleToggle}
       className={cn(
         "h-9 w-9 rounded-lg",
-        "border border-[var(--c-soft)]",
-        "bg-transparent",
-        "text-[var(--c-ink)]",
+        "border border-white/20",
+        "bg-white/5",
+        "text-white",
         "flex items-center justify-center",
         "transition-all duration-200 ease-out",
-        "hover:opacity-80",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-spark)] focus-visible:ring-offset-2",
-        "active:scale-90"
+        "hover:bg-white/10 hover:border-white/30",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+        "active:scale-90",
+        "backdrop-blur-sm"
       )}
       aria-label={isBlackWhite ? "Switch to color theme" : "Switch to black and white theme"}
       title={isBlackWhite ? "Switch to color theme" : "Switch to black and white theme"}
