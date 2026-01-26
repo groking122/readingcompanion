@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { UserButton } from "@clerk/nextjs"
-import { BookOpen, BookMarked, RotateCcw, Heart, Sparkles, Home, Menu, X } from "lucide-react"
+import { BookOpen, BookMarked, RotateCcw, Heart, Sparkles, Home, Menu, X, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ThemeRandomizer } from "@/components/theme-randomizer"
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/vocab", label: "Vocabulary", icon: BookMarked },
   { href: "/review", label: "Review", icon: RotateCcw },
+  { href: "/stats", label: "Stats", icon: BarChart3 },
 ]
 
 export function Nav() {

@@ -73,3 +73,22 @@ export const bookmarks = pgTable("bookmarks", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const reviewAttempts = pgTable("review_attempts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull(),
+  flashcardId: uuid("flashcard_id").references(() => flashcards.id).notNull(),
+  vocabularyId: uuid("vocabulary_id").references(() => vocabulary.id).notNull(),
+  sessionId: text("session_id"), // Groups attempts in a review session
+  attemptId: text("attempt_id").notNull(), // For idempotency
+  quality: integer("quality").notNull(), // 0-5 quality score
+  responseMs: integer("response_ms"), // Response time in milliseconds
+  exerciseType: text("exercise_type"), // "meaning-in-context", "cloze-blank", "reverse-mcq", "matching-pairs"
+  oldEaseFactor: doublePrecision("old_ease_factor"), // Before update
+  newEaseFactor: doublePrecision("new_ease_factor"), // After update
+  oldInterval: integer("old_interval"), // Before update
+  newInterval: integer("new_interval"), // After update
+  oldRepetitions: integer("old_repetitions"), // Before update
+  newRepetitions: integer("new_repetitions"), // After update
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+

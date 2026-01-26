@@ -3,6 +3,7 @@ import { Inter, Playfair_Display } from "next/font/google"
 import { ClerkProvider } from "@clerk/nextjs"
 import { ToastProvider } from "@/components/toast-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { OfflineProvider } from "@/components/offline-provider"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
@@ -36,6 +37,7 @@ export default function RootLayout({
           {children}
           <ToastProvider />
           <ThemeProvider />
+          <OfflineProvider />
         </body>
       </html>
     </ClerkProvider>

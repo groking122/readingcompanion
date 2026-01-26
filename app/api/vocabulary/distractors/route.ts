@@ -14,6 +14,8 @@ import { eq, and, desc, sql } from "drizzle-orm"
  * - count (optional, default 50): Number of items to return
  * - kind (optional): Filter by kind (word/phrase)
  */
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const user = await currentUser()

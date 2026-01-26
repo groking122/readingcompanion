@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { db } from "@/db"
-import { flashcards, vocabulary } from "@/db/schema"
+import { flashcards, vocabulary, reviewAttempts } from "@/db/schema"
 import { eq, and, lte, asc } from "drizzle-orm"
 import { updateCard } from "@/lib/sm2"
+import { trackMetric, logError, logWarning } from "@/lib/metrics"
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,6 +43,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  let sessionStartedAt: string | undefined
+  let flashcardId: string | undefined
+  
   try {
     const user = await currentUser()
     if (!user) {
@@ -49,7 +53,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { flashcardId, quality, sessionStartedAt } = body
+    const parsed = body as { flashcardId?: string; quality?: number; sessionStartedAt?: string; exerciseType?: string; responseMs?: number }
+    flashcardId = parsed.flashcardId
+    sessionStartedAt = parsed.sessionStartedAt
+    const { quality, exerciseType, responseMs } = parsed
 
     if (!flashcardId || quality === undefined) {
       return NextResponse.json(
@@ -81,6 +88,19 @@ export async function PATCH(request: NextRequest) {
         currentFlashcard.lastReviewedAt &&
         currentFlashcard.lastReviewedAt > sessionStartTime
       ) {
+        const sessionId = `session-${sessionStartedAt}`
+        trackMetric("session_conflict", {
+          userId: user.id,
+          sessionId,
+          metadata: { flashcardId },
+        })
+        logWarning("Session conflict detected", {
+          userId: user.id,
+          sessionId,
+          endpoint: "/api/flashcards",
+          metadata: { flashcardId },
+        })
+        
         return NextResponse.json(
           {
             error: "Session out of sync",
@@ -102,6 +122,13 @@ export async function PATCH(request: NextRequest) {
       quality
     )
 
+    // Store old state for logging
+    const oldState = {
+      easeFactor: currentFlashcard.easeFactor,
+      interval: currentFlashcard.interval,
+      repetitions: currentFlashcard.repetitions,
+    }
+
     // Update database
     const [updatedFlashcard] = await db
       .update(flashcards)
@@ -115,9 +142,63 @@ export async function PATCH(request: NextRequest) {
       .where(eq(flashcards.id, flashcardId))
       .returning()
 
+    // Log attempt to review_attempts table (non-blocking, don't fail if logging fails)
+    const sessionId = sessionStartedAt ? `session-${sessionStartedAt}` : undefined
+    const attemptId = `single-${flashcardId}-${Date.now()}`
+    
+    try {
+      await db.insert(reviewAttempts).values({
+        userId: user.id,
+        flashcardId: flashcardId,
+        vocabularyId: currentFlashcard.vocabularyId,
+        sessionId: sessionId,
+        attemptId: attemptId,
+        quality: quality,
+        responseMs: responseMs,
+        exerciseType: exerciseType,
+        oldEaseFactor: oldState.easeFactor,
+        newEaseFactor: updated.easeFactor,
+        oldInterval: oldState.interval,
+        newInterval: updated.interval,
+        oldRepetitions: oldState.repetitions,
+        newRepetitions: updated.repetitions,
+      })
+      
+      trackMetric("review_attempt_logged", {
+        userId: user.id,
+        sessionId,
+        attemptId,
+      })
+    } catch (logError: any) {
+      // Ignore unique constraint violations (idempotency - attempt already logged)
+      if (logError?.code !== "23505" && !logError?.message?.includes("unique constraint")) {
+        logError("Error logging review attempt", logError, {
+          userId: user.id,
+          sessionId,
+          attemptId,
+          endpoint: "/api/flashcards",
+          metadata: { flashcardId },
+        })
+      }
+    }
+
     return NextResponse.json(updatedFlashcard)
   } catch (error) {
-    console.error("Error updating flashcard:", error)
+    // Get user for error logging (may not be available if auth failed earlier)
+    const errorUser = await currentUser().catch(() => null)
+    
+    trackMetric("attempt_submit_fail", {
+      userId: errorUser?.id,
+      sessionId: sessionStartedAt ? `session-${sessionStartedAt}` : undefined,
+      metadata: { flashcardId },
+    })
+    logError("Error updating flashcard", error, {
+      userId: errorUser?.id,
+      sessionId: sessionStartedAt ? `session-${sessionStartedAt}` : undefined,
+      endpoint: "/api/flashcards",
+      metadata: { flashcardId },
+    })
+    
     return NextResponse.json(
       { error: "Failed to update flashcard" },
       { status: 500 }

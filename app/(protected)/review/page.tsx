@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useReducer } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Clock } from "lucide-react"
 import { RotateCcw, Loader2 } from "lucide-react"
 import { 
   generateExercise, 
@@ -11,6 +12,8 @@ import {
   type Exercise,
   type VocabularyItem 
 } from "@/lib/exercises"
+import { trackMetric, logError, logWarning } from "@/lib/metrics"
+import { offlineManager } from "@/lib/offline"
 
 // Exercise state machine
 type ExerciseState = 
@@ -52,6 +55,7 @@ import { ClozeBlankExercise } from "@/components/exercises/cloze-blank"
 import { ReverseMcqExercise } from "@/components/exercises/reverse-mcq"
 import { MatchingPairsExercise } from "@/components/exercises/matching-pairs"
 import { Footer } from "@/components/footer"
+import { SwipeDetector } from "@/components/swipe-detector"
 
 interface Flashcard {
   flashcard: {
@@ -82,6 +86,11 @@ export default function ReviewPage() {
   const [consumedFlashcards, setConsumedFlashcards] = useState(0) // Track consumed flashcards for progress
   const [lockedAttemptId, setLockedAttemptId] = useState<string | null>(null) // Prevent double-submit
   const [sessionStartedAt] = useState<string>(new Date().toISOString()) // Track session start for concurrency
+  const [lastActivityAt, setLastActivityAt] = useState<Date>(new Date()) // Track last activity for stuck session detection
+  const [exerciseAnswered, setExerciseAnswered] = useState(false) // Track if current exercise has been answered
+  const [timeLimit, setTimeLimit] = useState<number | null>(null) // Time limit in minutes (null = no limit)
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null) // Time remaining in seconds
+  const [showTimeLimitSelector, setShowTimeLimitSelector] = useState(false)
   
   // Derived state from exercise state machine
   const currentExercise = exerciseState.type === 'ready' ? exerciseState.exercise : null
@@ -92,6 +101,50 @@ export default function ReviewPage() {
     fetchDueFlashcards()
     fetchAllVocab()
   }, [])
+  
+  // Show time limit selector when flashcards are first loaded
+  useEffect(() => {
+    if (flashcards.length > 0 && !loading && timeLimit === null && !showTimeLimitSelector) {
+      setShowTimeLimitSelector(true)
+    }
+  }, [flashcards.length, loading, timeLimit])
+  
+  const handleTimeLimitReached = useCallback(async () => {
+    // Save current progress before ending session
+    if (updating) return
+    
+    // Show completion message
+    alert(`Time's up! You've completed ${consumedFlashcards} exercises. Great work!`)
+    
+    // Refresh to get new flashcards
+    await fetchDueFlashcards()
+    setTimeLimit(null)
+    setTimeRemaining(null)
+  }, [updating, consumedFlashcards])
+  
+  // Timer effect for time-limited sessions
+  useEffect(() => {
+    if (timeLimit === null || timeRemaining === null) return
+    
+    const interval = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev === null || prev <= 1) {
+          // Time's up - end session gracefully
+          handleTimeLimitReached()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    
+    return () => clearInterval(interval)
+  }, [timeLimit, timeRemaining, handleTimeLimitReached])
+  
+  const startSessionWithTimeLimit = (minutes: number) => {
+    setTimeLimit(minutes)
+    setTimeRemaining(minutes * 60)
+    setShowTimeLimitSelector(false)
+  }
 
   const generateCurrentExercise = useCallback(() => {
     if (flashcards.length === 0 || allVocab.length === 0) {
@@ -149,7 +202,29 @@ export default function ReviewPage() {
               })
               return
             }
+          } else {
+            // Matching pairs generation failed
+            trackMetric("exercise_generation_fail", {
+              userId: undefined,
+              sessionId: sessionStartedAt,
+              metadata: {
+                exerciseType: "matching-pairs",
+                reason: matchingExercise ? "insufficient_pairs" : "generation_failed",
+                pairsGenerated: matchingExercise?.pairs.length || 0,
+              },
+            })
           }
+        } else {
+          // Not enough items for matching pairs
+          trackMetric("exercise_generation_fail", {
+            userId: undefined,
+            sessionId: sessionStartedAt,
+            metadata: {
+              exerciseType: "matching-pairs",
+              reason: "insufficient_items",
+              itemsAvailable: itemsForMatching.length,
+            },
+          })
         }
         // If matching fails or doesn't have exactly 5 pairs, fall through to regular exercise
       }
@@ -182,6 +257,16 @@ export default function ReviewPage() {
         })
       } else {
         // Fallback: exercise generation failed, but retryable
+        trackMetric("exercise_generation_fail", {
+          userId: undefined, // Will be set if available
+          sessionId: sessionStartedAt,
+          metadata: {
+            vocabularyId: vocabItem.id,
+            exerciseType: "single",
+            reason: "generation_returned_null",
+          },
+        })
+        
         dispatchExercise({
           type: 'GENERATE_ERROR',
           error: 'Failed to generate exercise',
@@ -189,6 +274,22 @@ export default function ReviewPage() {
         })
       }
     } catch (error) {
+      trackMetric("exercise_generation_fail", {
+        userId: undefined,
+        sessionId: sessionStartedAt,
+        metadata: {
+          vocabularyId: current.vocabulary.id,
+          exerciseType: "single",
+          reason: "exception",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      })
+      logError("Exercise generation exception", error, {
+        sessionId: sessionStartedAt,
+        endpoint: "review-page",
+        metadata: { vocabularyId: current.vocabulary.id },
+      })
+      
       dispatchExercise({
         type: 'GENERATE_ERROR',
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -201,18 +302,80 @@ export default function ReviewPage() {
     if (flashcards.length > 0 && allVocab.length > 0) {
       dispatchExercise({ type: 'RESET' })
       generateCurrentExercise()
+      setLastActivityAt(new Date()) // Update activity timestamp
+      setExerciseAnswered(false) // Reset answered state for new exercise
     }
   }, [flashcards, allVocab, currentIndex, generateCurrentExercise])
+  
+  // Detect stuck sessions (no activity for 5 minutes)
+  useEffect(() => {
+    const checkStuckSession = setInterval(() => {
+      const timeSinceLastActivity = Date.now() - lastActivityAt.getTime()
+      const STUCK_THRESHOLD = 5 * 60 * 1000 // 5 minutes
+      
+      if (timeSinceLastActivity > STUCK_THRESHOLD && flashcards.length > 0) {
+        trackMetric("stuck_session", {
+          sessionId: sessionStartedAt,
+          metadata: {
+            timeSinceLastActivity: Math.floor(timeSinceLastActivity / 1000),
+            flashcardsRemaining: flashcards.length - consumedFlashcards,
+          },
+        })
+        logWarning("Stuck session detected", {
+          sessionId: sessionStartedAt,
+          endpoint: "review-page",
+          metadata: {
+            timeSinceLastActivity: Math.floor(timeSinceLastActivity / 1000),
+            flashcardsRemaining: flashcards.length - consumedFlashcards,
+          },
+        })
+      }
+    }, 60000) // Check every minute
+    
+    return () => clearInterval(checkStuckSession)
+  }, [lastActivityAt, sessionStartedAt, flashcards.length, consumedFlashcards])
 
   const fetchDueFlashcards = async () => {
     try {
       const res = await fetch("/api/flashcards?due=true")
+      if (!res.ok) throw new Error("Failed to fetch")
+      
       const data = await res.json()
       setFlashcards(data)
       setCurrentIndex(0)
       setConsumedFlashcards(0) // Reset consumed count when fetching new flashcards
+      
+      // Cache flashcards for offline use
+      if (offlineManager.isOnline()) {
+        await offlineManager.cacheFlashcards(
+          data.map((fc: any) => ({
+            id: fc.flashcard.id,
+            flashcard: fc.flashcard,
+            vocabulary: fc.vocabulary,
+          }))
+        )
+      }
     } catch (error) {
       console.error("Error fetching flashcards:", error)
+      
+      // Try to load from cache if offline
+      if (!offlineManager.isOnline()) {
+        try {
+          const cached = await offlineManager.getCachedFlashcards()
+          if (cached.length > 0) {
+            setFlashcards(
+              cached.map((c) => ({
+                flashcard: c.flashcard,
+                vocabulary: c.vocabulary,
+              }))
+            )
+            setCurrentIndex(0)
+            setConsumedFlashcards(0)
+          }
+        } catch (cacheError) {
+          console.error("Error loading cached flashcards:", cacheError)
+        }
+      }
     } finally {
       setLoading(false)
     }
@@ -220,21 +383,73 @@ export default function ReviewPage() {
 
   const fetchAllVocab = async () => {
     try {
-      const res = await fetch("/api/vocabulary")
-      const data = await res.json()
-      // Transform to VocabularyItem format
-      const vocabItems: VocabularyItem[] = data.map((item: any) => ({
-        id: item.id,
-        term: item.term,
-        termNormalized: item.termNormalized,
-        translation: item.translation,
-        context: item.context,
-        kind: item.kind || "word",
-        bookId: item.bookId,
-        epubLocation: item.epubLocation,
-        pageNumber: item.pageNumber,
-      }))
-      setAllVocab(vocabItems)
+      // First, try distractor pool endpoint (optimized for performance)
+      let vocabItems: VocabularyItem[] = []
+      let usedDistractorPool = false
+      
+      try {
+        const distractorRes = await fetch("/api/vocabulary/distractors?count=200")
+        if (distractorRes.ok) {
+          const distractorData = await distractorRes.json()
+          // Transform to VocabularyItem format
+          vocabItems = distractorData.map((item: any) => ({
+            id: item.id,
+            term: item.term,
+            termNormalized: item.termNormalized,
+            translation: item.translation,
+            context: item.context,
+            kind: item.kind || "word",
+            bookId: item.bookId,
+            epubLocation: item.epubLocation,
+            pageNumber: item.pageNumber,
+          }))
+          
+          // Check if we have enough items for good distractor variety
+          // If we have fewer than 50 items, fallback to full fetch
+          if (vocabItems.length >= 50) {
+            usedDistractorPool = true
+            setAllVocab(vocabItems)
+            return
+          } else {
+            console.warn(`Distractor pool returned only ${vocabItems.length} items, falling back to full fetch`)
+            trackMetric("distractor_pool_fallback", {
+              sessionId: sessionStartedAt,
+              metadata: { reason: "insufficient_items", count: vocabItems.length },
+            })
+          }
+        } else {
+          console.warn("Distractor pool request failed, falling back to full fetch")
+          trackMetric("distractor_pool_fallback", {
+            sessionId: sessionStartedAt,
+            metadata: { reason: "request_failed", status: distractorRes.status },
+          })
+        }
+      } catch (distractorError) {
+        console.warn("Error fetching distractor pool, falling back to full fetch:", distractorError)
+        trackMetric("distractor_pool_fallback", {
+          sessionId: sessionStartedAt,
+          metadata: { reason: "exception", error: distractorError instanceof Error ? distractorError.message : String(distractorError) },
+        })
+      }
+      
+      // Fallback to full vocabulary fetch
+      if (!usedDistractorPool) {
+        const res = await fetch("/api/vocabulary")
+        const data = await res.json()
+        // Transform to VocabularyItem format
+        vocabItems = data.map((item: any) => ({
+          id: item.id,
+          term: item.term,
+          termNormalized: item.termNormalized,
+          translation: item.translation,
+          context: item.context,
+          kind: item.kind || "word",
+          bookId: item.bookId,
+          epubLocation: item.epubLocation,
+          pageNumber: item.pageNumber,
+        }))
+        setAllVocab(vocabItems)
+      }
     } catch (error) {
       console.error("Error fetching vocabulary:", error)
     }
@@ -256,11 +471,17 @@ export default function ReviewPage() {
     isCorrectOrQualities: boolean | Array<{ flashcardId: string; quality: number; responseMs: number }>,
     timeMs?: number
   ) => {
+    // Prevent double-submit
+    if (exerciseAnswered || updating) {
+      return
+    }
+    setExerciseAnswered(true)
+    
     // Generate attempt ID to prevent double-submit
     const attemptId = `${isMatchingPairs ? 'matching' : 'single'}-${currentIndex}-${Date.now()}`
     
     // Check if already processing this attempt
-    if (lockedAttemptId === attemptId || updating) {
+    if (lockedAttemptId === attemptId) {
       return // Already processing, ignore duplicate submission
     }
     
@@ -307,6 +528,31 @@ export default function ReviewPage() {
         }
 
         if (!response.ok) {
+          // If offline, queue the attempts
+          if (!offlineManager.isOnline()) {
+            for (const item of itemQualities) {
+              await offlineManager.queueReviewAttempt({
+                flashcardId: item.flashcardId,
+                vocabularyId: flashcards.find(fc => fc.flashcard.id === item.flashcardId)?.vocabulary.id || "",
+                quality: item.quality,
+                responseMs: item.responseMs,
+                exerciseType: "matching-pairs",
+              })
+            }
+            // Continue with local state update
+            const consumed = matchingPairsFlashcardIds.length
+            setConsumedFlashcards(prev => prev + consumed)
+            setLastActivityAt(new Date())
+            const nextIndex = currentIndex + consumed
+            if (nextIndex >= flashcards.length) {
+              await fetchDueFlashcards()
+            } else {
+              setCurrentIndex(nextIndex)
+            }
+            setUpdating(false)
+            setLockedAttemptId(null)
+            return
+          }
           throw new Error(`Batch update failed: ${response.statusText}`)
         }
 
@@ -322,6 +568,7 @@ export default function ReviewPage() {
         // Update consumed count
         const consumed = matchingPairsFlashcardIds.length
         setConsumedFlashcards(prev => prev + consumed)
+        setLastActivityAt(new Date()) // Update activity timestamp
         
         // Move forward by the number of flashcards consumed
         const nextIndex = currentIndex + consumed
@@ -351,6 +598,9 @@ export default function ReviewPage() {
       
       setUpdating(true)
       try {
+        // Get exercise type from current exercise if available
+        const exerciseType = currentExercise?.type || undefined
+        
         const response = await fetch("/api/flashcards", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -358,6 +608,8 @@ export default function ReviewPage() {
             flashcardId: current.flashcard.id,
             quality,
             sessionStartedAt,
+            exerciseType,
+            responseMs: singleTimeMs,
           }),
         })
 
@@ -373,11 +625,33 @@ export default function ReviewPage() {
         }
 
         if (!response.ok) {
+          // If offline, queue the attempt
+          if (!offlineManager.isOnline()) {
+            await offlineManager.queueReviewAttempt({
+              flashcardId: current.flashcard.id,
+              vocabularyId: current.vocabulary.id,
+              quality,
+              responseMs: singleTimeMs,
+              exerciseType,
+            })
+            // Continue with local state update
+            setConsumedFlashcards(prev => prev + 1)
+            setLastActivityAt(new Date())
+            if (currentIndex < flashcards.length - 1) {
+              setCurrentIndex(currentIndex + 1)
+            } else {
+              await fetchDueFlashcards()
+            }
+            setUpdating(false)
+            setLockedAttemptId(null)
+            return
+          }
           throw new Error(`Update failed: ${response.statusText}`)
         }
 
         // Update consumed count
         setConsumedFlashcards(prev => prev + 1)
+        setLastActivityAt(new Date()) // Update activity timestamp
 
         // Move to next card or refresh if done
         if (currentIndex < flashcards.length - 1) {
@@ -434,6 +708,60 @@ export default function ReviewPage() {
                 View Vocabulary
               </Button>
             </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  // Time limit selector (shown before starting review)
+  if (showTimeLimitSelector && flashcards.length > 0) {
+    return (
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-xl page-transition">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 md:px-6">
+          <div className="max-w-md w-full fade-in">
+            <Card className="bento-card p-6 md:p-8 shadow-elevated">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="h-5 w-5" />
+                <h2 className="text-2xl font-bold">Start Review Session</h2>
+              </div>
+              <p className="text-muted-foreground mb-6">
+                Choose a time limit or review without a limit
+              </p>
+              <div className="space-y-3">
+                <Button
+                  onClick={() => startSessionWithTimeLimit(5)}
+                  className="w-full"
+                  variant="outline"
+                >
+                  Quick 5-min Review
+                </Button>
+                <Button
+                  onClick={() => startSessionWithTimeLimit(10)}
+                  className="w-full"
+                  variant="outline"
+                >
+                  Standard 10-min Review
+                </Button>
+                <Button
+                  onClick={() => startSessionWithTimeLimit(15)}
+                  className="w-full"
+                  variant="outline"
+                >
+                  Extended 15-min Review
+                </Button>
+                <Button
+                  onClick={() => {
+                    setTimeLimit(null)
+                    setTimeRemaining(null)
+                    setShowTimeLimitSelector(false)
+                  }}
+                  className="w-full"
+                >
+                  No Time Limit
+                </Button>
+              </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -579,17 +907,64 @@ export default function ReviewPage() {
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
-            <div className="text-sm text-muted-foreground">
-              {Math.round(progressPercentage)}%
+            <div className="flex items-center gap-3">
+              {timeRemaining !== null && (
+                <div className="text-sm font-medium text-orange-500">
+                  {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                </div>
+              )}
+              <div className="text-sm text-muted-foreground">
+                {Math.round(progressPercentage)}%
+              </div>
             </div>
           </div>
         </div>
 
         {/* Center Card */}
         <div className="w-full max-w-2xl fade-in-delay">
-          <div className="bento-card p-6 md:p-8 shadow-elevated">
-            {renderExercise()}
-          </div>
+          <SwipeDetector
+            disabled={exerciseAnswered || isMatchingPairs || updating}
+            onSwipeLeft={() => {
+              // Swipe left = Hard (quality 0)
+              if (!exerciseAnswered && !isMatchingPairs) {
+                handleExerciseAnswer(false, 0)
+              }
+            }}
+            onSwipeRight={() => {
+              // Swipe right = Easy (quality 5, fast response)
+              if (!exerciseAnswered && !isMatchingPairs) {
+                handleExerciseAnswer(true, 1000) // Fast response = Easy
+              }
+            }}
+            onSwipeUp={() => {
+              // Swipe up = Good (quality 4, slower response)
+              if (!exerciseAnswered && !isMatchingPairs) {
+                handleExerciseAnswer(true, 5000) // Slower response = Good
+              }
+            }}
+            threshold={80}
+          >
+            <div className="bento-card p-6 md:p-8 shadow-elevated">
+              {renderExercise()}
+            </div>
+          </SwipeDetector>
+          
+          {/* Swipe hints (mobile only) */}
+          {!exerciseAnswered && !isMatchingPairs && (
+            <div className="mt-4 text-center text-xs text-muted-foreground md:hidden">
+              <div className="flex items-center justify-center gap-4">
+                <span className="flex items-center gap-1">
+                  <span className="text-red-500">←</span> Hard
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="text-blue-500">↑</span> Good
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="text-green-500">→</span> Easy
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-auto">

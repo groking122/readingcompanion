@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { db } from "@/db"
-import { flashcards } from "@/db/schema"
+import { flashcards, reviewAttempts } from "@/db/schema"
 import { eq, and, inArray } from "drizzle-orm"
 import { updateCard } from "@/lib/sm2"
 import { sql } from "drizzle-orm"
+import { trackMetric, logError, logWarning } from "@/lib/metrics"
 
 interface ReviewItem {
   flashcardId: string
@@ -53,14 +54,23 @@ function storeAttempt(attemptId: string, results: any[]) {
 }
 
 export async function POST(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof currentUser>> = null
+  let sessionId: string | undefined
+  let attemptId: string | undefined
+  
   try {
-    const user = await currentUser()
+    user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    
+    // Create const reference for TypeScript type narrowing
+    const authenticatedUser = user
 
     const body: ReviewRequest = await request.json()
-    const { sessionId, attemptId, sessionStartedAt, items } = body
+    const { sessionId: extractedSessionId, attemptId: extractedAttemptId, sessionStartedAt, items } = body
+    sessionId = extractedSessionId
+    attemptId = extractedAttemptId
 
     // Validate request
     if (!attemptId || !items || !Array.isArray(items) || items.length === 0) {
@@ -85,6 +95,7 @@ export async function POST(request: NextRequest) {
     const userFlashcards = await db
       .select({
         id: flashcards.id,
+        vocabularyId: flashcards.vocabularyId,
         easeFactor: flashcards.easeFactor,
         interval: flashcards.interval,
         repetitions: flashcards.repetitions,
@@ -94,7 +105,7 @@ export async function POST(request: NextRequest) {
       .from(flashcards)
       .where(
         and(
-          eq(flashcards.userId, user.id),
+          eq(flashcards.userId, authenticatedUser.id),
           inArray(flashcards.id, flashcardIds)
         )
       )
@@ -110,6 +121,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (conflicts.length > 0) {
+      trackMetric("session_conflict", {
+        userId: authenticatedUser.id,
+        sessionId,
+        metadata: { conflictCount: conflicts.length },
+      })
+      logWarning("Session conflict detected", {
+        userId: authenticatedUser.id,
+        sessionId,
+        attemptId,
+        endpoint: "/api/reviews",
+        metadata: { conflicts },
+      })
+      
       return NextResponse.json(
         {
           error: "Session out of sync",
@@ -146,6 +170,15 @@ export async function POST(request: NextRequest) {
       // Use drizzle transaction
       await db.transaction(async (tx) => {
         const updates: Promise<any>[] = []
+        const attemptLogs: Array<{
+          flashcardId: string
+          vocabularyId: string
+          oldState: { easeFactor: number; interval: number; repetitions: number }
+          newState: { easeFactor: number; interval: number; repetitions: number }
+          quality: number
+          responseMs?: number
+          exerciseType?: string
+        }> = []
         
         for (const item of items) {
           const flashcard = flashcardMap.get(item.flashcardId)
@@ -156,6 +189,13 @@ export async function POST(request: NextRequest) {
               error: "Flashcard not found",
             })
             continue
+          }
+
+          // Store old state for logging
+          const oldState = {
+            easeFactor: flashcard.easeFactor,
+            interval: flashcard.interval,
+            repetitions: flashcard.repetitions,
           }
 
           // Update using SM-2 algorithm
@@ -184,6 +224,21 @@ export async function POST(request: NextRequest) {
               .returning()
           )
 
+          // Store attempt data for logging
+          attemptLogs.push({
+            flashcardId: item.flashcardId,
+            vocabularyId: flashcard.vocabularyId,
+            oldState,
+            newState: {
+              easeFactor: updated.easeFactor,
+              interval: updated.interval,
+              repetitions: updated.repetitions,
+            },
+            quality: item.quality,
+            responseMs: item.responseMs,
+            exerciseType: item.exerciseType,
+          })
+
           results.push({
             flashcardId: item.flashcardId,
             success: true,
@@ -192,6 +247,60 @@ export async function POST(request: NextRequest) {
 
         // Execute all updates
         await Promise.all(updates)
+
+        // Log attempts to review_attempts table (non-blocking, don't fail if logging fails)
+        try {
+          const logPromises = attemptLogs.map(async (log) => {
+            // Create unique attempt ID for each item in batch
+            const itemAttemptId = `${attemptId}-${log.flashcardId}`
+            
+            try {
+              await tx.insert(reviewAttempts).values({
+                userId: authenticatedUser.id,
+                flashcardId: log.flashcardId,
+                vocabularyId: log.vocabularyId,
+                sessionId: sessionId,
+                attemptId: itemAttemptId,
+                quality: log.quality,
+                responseMs: log.responseMs,
+                exerciseType: log.exerciseType,
+                oldEaseFactor: log.oldState.easeFactor,
+                newEaseFactor: log.newState.easeFactor,
+                oldInterval: log.oldState.interval,
+                newInterval: log.newState.interval,
+                oldRepetitions: log.oldState.repetitions,
+                newRepetitions: log.newState.repetitions,
+              })
+            } catch (insertError: any) {
+              // Ignore unique constraint violations (idempotency - attempt already logged)
+              if (insertError?.code === "23505" || insertError?.message?.includes("unique constraint")) {
+                // Attempt already logged, ignore
+                return
+              }
+              // Re-throw other errors
+              throw insertError
+            }
+          })
+          
+          await Promise.all(logPromises)
+          
+          // Track successful logging
+          trackMetric("review_attempt_logged", {
+            userId: authenticatedUser.id,
+            sessionId,
+            attemptId,
+            metadata: { count: attemptLogs.length },
+          })
+        } catch (err) {
+          // Log error but don't fail the review update
+          logError("Error logging review attempts", err, {
+            userId: authenticatedUser.id,
+            sessionId,
+            attemptId,
+            endpoint: "/api/reviews",
+            metadata: { attemptCount: attemptLogs.length },
+          })
+        }
       })
 
       // Store attempt for idempotency
@@ -203,7 +312,7 @@ export async function POST(request: NextRequest) {
         .from(flashcards)
         .where(
           and(
-            eq(flashcards.userId, user.id),
+            eq(flashcards.userId, authenticatedUser.id),
             sql`${flashcards.dueAt} <= NOW()`
           )
         )
@@ -214,7 +323,20 @@ export async function POST(request: NextRequest) {
         nextDueCount: Number(dueCount[0]?.count || 0),
       })
     } catch (error) {
-      console.error("Error in batch update transaction:", error)
+      trackMetric("attempt_submit_fail", {
+        userId: authenticatedUser.id,
+        sessionId,
+        attemptId,
+        metadata: { itemCount: items.length },
+      })
+      logError("Error in batch update transaction", error, {
+        userId: authenticatedUser.id,
+        sessionId,
+        attemptId,
+        endpoint: "/api/reviews",
+        metadata: { itemCount: items.length },
+      })
+      
       return NextResponse.json(
         {
           error: "Failed to update flashcards",
@@ -224,7 +346,18 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error("Error processing review batch:", error)
+    trackMetric("attempt_submit_fail", {
+      userId: user?.id,
+      sessionId,
+      attemptId,
+    })
+    logError("Error processing review batch", error, {
+      userId: user?.id,
+      sessionId,
+      attemptId,
+      endpoint: "/api/reviews",
+    })
+    
     return NextResponse.json(
       { error: "Failed to process review batch" },
       { status: 500 }
