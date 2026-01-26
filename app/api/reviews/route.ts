@@ -43,7 +43,8 @@ function storeAttempt(attemptId: string, results: any[]) {
   // Clean up old entries periodically
   if (processedAttempts.size > 1000) {
     const now = Date.now()
-    for (const [id, data] of processedAttempts.entries()) {
+    // Convert iterator to array for ES5 compatibility
+    for (const [id, data] of Array.from(processedAttempts.entries())) {
       if (now - data.timestamp > IDEMPOTENCY_TTL) {
         processedAttempts.delete(id)
       }
