@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { db } from "@/db"
 import { vocabulary, flashcards } from "@/db/schema"
-import { eq, and, desc } from "drizzle-orm"
+import { eq, and, desc, sql } from "drizzle-orm"
 
 /**
  * GET /api/vocabulary/distractors
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         pageNumber: vocabulary.pageNumber,
         position: vocabulary.position,
         epubLocation: vocabulary.epubLocation,
-        lastReviewedAt: null,
+        lastReviewedAt: sql<Date | null>`NULL`.as('lastReviewedAt'),
       })
       .from(vocabulary)
       .where(and(...conditions))
