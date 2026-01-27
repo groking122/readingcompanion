@@ -173,7 +173,7 @@ export function TranslationContent({
             disabled={saving || !translation || !!savedWordId}
             className={cn(
               "flex-1",
-              compact ? "h-10 min-h-[40px]" : "h-12 min-h-[48px]"
+              compact ? "h-12 min-h-[48px]" : "h-12 min-h-[48px]"
             )}
             type="button"
           >
@@ -186,7 +186,7 @@ export function TranslationContent({
               onClick={onMarkKnown}
               disabled={saving}
               className={cn(
-                compact ? "h-10 min-w-[40px] px-3" : "h-12 min-w-[48px] px-4"
+                compact ? "h-12 min-w-[48px] px-3" : "h-12 min-w-[48px] px-4"
               )}
               title="Mark as known - won't show in future lookups"
             >
@@ -201,7 +201,7 @@ export function TranslationContent({
             onClick={onUndo}
             className={cn(
               "w-full",
-              compact ? "h-10 min-h-[40px]" : "h-12 min-h-[48px]"
+              compact ? "h-12 min-h-[48px]" : "h-12 min-h-[48px]"
             )}
           >
             Undo

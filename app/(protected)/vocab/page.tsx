@@ -8,7 +8,7 @@ import { toast } from "@/lib/toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, BookOpen, BookMarked, Calendar, FileText, RotateCcw, ExternalLink, Download, Upload, List, Grid, CheckSquare, Square, Trash2 } from "lucide-react"
+import { Search, BookOpen, BookMarked, Calendar, FileText, RotateCcw, ExternalLink, Download, Upload, List, Grid, CheckSquare, Square, Trash2, RefreshCw } from "lucide-react"
 import { formatTitleCase } from "@/lib/utils"
 import { Footer } from "@/components/footer"
 
@@ -49,6 +49,7 @@ export default function VocabPage() {
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [resettingFlashcard, setResettingFlashcard] = useState<string | null>(null)
 
   const navigateToWord = (item: Vocabulary) => {
     // Navigate to reader with location/page and search term
@@ -70,10 +71,9 @@ export default function VocabPage() {
       params.set("search", searchWord)
     }
     
-    // Open in new tab
+    // Navigate in same tab (better UX)
     const fullUrl = `${url}?${params.toString()}`
-    console.log("Navigating to:", fullUrl)
-    window.open(fullUrl, "_blank")
+    router.push(fullUrl)
   }
 
   useEffect(() => {
@@ -282,6 +282,42 @@ export default function VocabPage() {
 
   const getBookTitle = (bookId: string) => {
     return books.find((b) => b.id === bookId)?.title || "Unknown Book"
+  }
+
+  const handlePracticeAgain = async (item: Vocabulary) => {
+    if (!item.flashcard) {
+      toast.error("No flashcard found", "This word doesn't have a flashcard yet.")
+      return
+    }
+
+    setResettingFlashcard(item.flashcard.id)
+    try {
+      const res = await fetch("/api/flashcards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flashcardId: item.flashcard.id,
+        }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: "Failed to reset flashcard" }))
+        throw new Error(error.error || "Failed to reset flashcard")
+      }
+
+      toast.success("Ready to practice!", "This word will appear in your review session.")
+      
+      // Refresh data to show updated due status
+      await fetchData()
+    } catch (error) {
+      console.error("Error resetting flashcard:", error)
+      toast.error(
+        "Failed to reset",
+        error instanceof Error ? error.message : "Could not reset flashcard. Please try again."
+      )
+    } finally {
+      setResettingFlashcard(null)
+    }
   }
 
   const formatEpubLocation = (cfi: string): string => {
@@ -493,29 +529,27 @@ export default function VocabPage() {
                           <FileText className="h-3 w-3" />
                           <span className="text-xs font-medium">Context</span>
                         </div>
-                        {(item.pageNumber || item.epubLocation) && (
-                          <button
-                            onClick={() => navigateToWord(item)}
-                            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-                          >
-                            {item.pageNumber ? (
-                              <>
-                                <span>Page {item.pageNumber}</span>
-                                <ExternalLink className="h-3 w-3" />
-                              </>
-                            ) : (
-                              <>
-                                <span>Go to location</span>
-                                <ExternalLink className="h-3 w-3" />
-                              </>
-                            )}
-                          </button>
-                        )}
                       </div>
                       <p className="text-muted-foreground italic line-clamp-1">
                         "{formatTitleCase(item.context)}"
                       </p>
                     </div>
+                  )}
+                  
+                  {/* Open in book button - always visible when location is available */}
+                  {(item.epubLocation || item.pageNumber) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigateToWord(item)}
+                      className="w-full text-xs min-h-[48px]"
+                    >
+                      <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+                      Open in book
+                      {item.pageNumber && (
+                        <span className="ml-1.5 text-muted-foreground">(Page {item.pageNumber})</span>
+                      )}
+                    </Button>
                   )}
                   
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
@@ -540,16 +574,38 @@ export default function VocabPage() {
                     )}
                   </div>
 
-                  {item.flashcard && isDue && (
+                  {item.flashcard && (
                     <div className="pt-2 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={() => window.location.href = '/review'}
-                      >
-                        Review Now
-                      </Button>
+                      {isDue ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs"
+                          onClick={() => window.location.href = '/review'}
+                        >
+                          Review Now
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs"
+                          onClick={() => handlePracticeAgain(item)}
+                          disabled={resettingFlashcard === item.flashcard.id}
+                        >
+                          {resettingFlashcard === item.flashcard.id ? (
+                            <>
+                              <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                              Resetting...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-3 w-3 mr-2" />
+                              Practice Again
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </CardContent>

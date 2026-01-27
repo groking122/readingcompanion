@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { BookOpen, Heart, Sparkles, BookMarked, RotateCcw, ChevronDown, ChevronUp, ExternalLink, Plus } from "lucide-react"
+import { BookOpen, Heart, Sparkles, BookMarked, RotateCcw, ChevronDown, ChevronUp, ExternalLink, Plus, BarChart3 } from "lucide-react"
 import { useUser } from "@clerk/nextjs"
 import Link from "next/link"
 import { formatTitleCase } from "@/lib/utils"
@@ -57,7 +57,9 @@ export default function HomePage() {
   const [books, setBooks] = useState<Book[]>([])
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([])
   const [vocabularyItems, setVocabularyItems] = useState<VocabularyItem[]>([])
+  const [totalVocabularyCount, setTotalVocabularyCount] = useState<number>(0)
   const [flashcards, setFlashcards] = useState<Flashcard[]>([])
+  const [totalDueCount, setTotalDueCount] = useState<number>(0)
   const [bookProgress, setBookProgress] = useState<{ [bookId: string]: number }>({})
   const [loading, setLoading] = useState(true)
   
@@ -106,6 +108,18 @@ export default function HomePage() {
   useEffect(() => {
     fetchDashboardData()
   }, [])
+
+  // Add timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.warn("Dashboard loading timeout - forcing loading to false")
+        setLoading(false)
+      }
+    }, 10000) // 10 second timeout
+
+    return () => clearTimeout(timeout)
+  }, [loading])
 
   // Handle scroll and resize for tooltip positioning
   useEffect(() => {
@@ -161,13 +175,26 @@ export default function HomePage() {
   }, [tooltip.visible, tooltip.itemId])
 
   const fetchDashboardData = async () => {
+    setLoading(true)
     try {
       // Fetch all data in parallel
       const [booksRes, wishlistRes, vocabRes, flashcardsRes] = await Promise.all([
-        fetch("/api/books"),
-        fetch("/api/wishlist"),
-        fetch("/api/vocabulary"),
-        fetch("/api/flashcards?due=true"),
+        fetch("/api/books").catch(err => {
+          console.error("Error fetching books:", err)
+          return { ok: false, json: async () => [] }
+        }),
+        fetch("/api/wishlist").catch(err => {
+          console.error("Error fetching wishlist:", err)
+          return { ok: false, json: async () => [] }
+        }),
+        fetch("/api/vocabulary").catch(err => {
+          console.error("Error fetching vocabulary:", err)
+          return { ok: false, json: async () => [] }
+        }),
+        fetch("/api/flashcards?due=true").catch(err => {
+          console.error("Error fetching flashcards:", err)
+          return { ok: false, json: async () => [] }
+        }),
       ])
 
       if (booksRes.ok) {
@@ -177,12 +204,17 @@ export default function HomePage() {
         const latestBook = booksArray.length > 0 ? booksArray[booksArray.length - 1] : null
         setCurrentBook(latestBook)
         
-        // Fetch bookmarks for progress calculation
+        // Fetch bookmarks for progress calculation (don't block main loading)
         if (latestBook) {
-          try {
-            const bookmarksRes = await fetch(`/api/bookmarks?bookId=${latestBook.id}`)
+          // Fetch bookmarks asynchronously without blocking
+          fetch(`/api/bookmarks?bookId=${latestBook.id}`)
+            .then(bookmarksRes => {
             if (bookmarksRes.ok) {
-              const bookmarks: Bookmark[] = await bookmarksRes.json()
+                return bookmarksRes.json()
+              }
+              return []
+            })
+            .then((bookmarks: Bookmark[]) => {
               // Look for the auto-saved "last read" bookmark first
               const lastReadBookmark = bookmarks.find(b => b.title === "__LAST_READ__")
               
@@ -200,11 +232,11 @@ export default function HomePage() {
               } else {
                 setBookProgress({ [latestBook.id]: 0 })
               }
-            }
-          } catch (error) {
+            })
+            .catch(error => {
             console.error("Error fetching bookmarks:", error)
             setBookProgress({ [latestBook.id]: 0 })
-          }
+            })
         }
       }
 
@@ -215,17 +247,24 @@ export default function HomePage() {
 
       if (vocabRes.ok) {
         const vocab = await vocabRes.json()
-        setVocabularyItems(Array.isArray(vocab) ? vocab.slice(0, 5) : [])
+        const vocabArray = Array.isArray(vocab) ? vocab : []
+        setTotalVocabularyCount(vocabArray.length)
+        setVocabularyItems(vocabArray.slice(0, 5))
       }
 
       if (flashcardsRes.ok) {
         const cards = await flashcardsRes.json()
         // API returns array of { flashcard, vocabulary } objects
-        setFlashcards(Array.isArray(cards) ? cards.slice(0, 5) : [])
+        const cardsArray = Array.isArray(cards) ? cards : []
+        setTotalDueCount(cardsArray.length)
+        setFlashcards(cardsArray.slice(0, 5)) // Keep only 5 for display widget
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
+      // Ensure loading is set to false even on error
+      setLoading(false)
     } finally {
+      // Always set loading to false, even if there were errors
       setLoading(false)
     }
   }
@@ -390,7 +429,7 @@ export default function HomePage() {
           
           {/* Words Stat */}
           <div className="bento-card p-4 md:p-6 flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform duration-300 relative overflow-hidden flex-1">
-            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{vocabularyItems.length || 0}</div>
+            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{totalVocabularyCount || 0}</div>
             <div className="text-[10px] md:text-xs text-muted-foreground font-medium">Words</div>
             {/* Animated graph line on hover */}
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[var(--c-spark)]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -402,7 +441,7 @@ export default function HomePage() {
           
           {/* Due Stat */}
           <div className="bento-card p-4 md:p-6 flex flex-col items-center justify-center text-center group hover:scale-105 transition-transform duration-300 flex-1">
-            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{flashcards.length || 0}</div>
+            <div className="text-2xl md:text-3xl lg:text-4xl font-bold mb-1 md:mb-2 text-foreground">{totalDueCount || 0}</div>
             <div className="text-[10px] md:text-xs text-muted-foreground font-medium">Due</div>
           </div>
         </div>
@@ -648,7 +687,7 @@ export default function HomePage() {
           <h2 className="text-xl md:text-2xl font-serif font-bold tracking-tight">Quick Actions</h2>
           <p className="text-xs md:text-sm text-muted-foreground hidden md:block">Navigate with ease</p>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 lg:gap-6">
           <Link href="/library" className="group">
             <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
               <div className="icon-container icon-premium bg-[var(--c-light)] text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)] mx-auto mb-3 md:mb-4 group-hover:bg-[var(--c-soft)]/20 group-hover:-translate-y-0.5 transition-all duration-300 relative">
@@ -683,6 +722,15 @@ export default function HomePage() {
               </div>
               <p className="text-xs md:text-sm font-semibold">Review</p>
               <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Practice</p>
+            </div>
+          </Link>
+          <Link href="/stats" className="group">
+            <div className="bento-card p-4 md:p-6 text-center hover:scale-105 transition-transform duration-300 cursor-pointer relative">
+              <div className="icon-container icon-premium bg-[var(--c-light)] text-[var(--c-ink)] [data-theme='jet-black']:text-[var(--c-strong)] mx-auto mb-3 md:mb-4 group-hover:bg-[var(--c-soft)]/20 group-hover:-translate-y-0.5 transition-all duration-300 relative">
+                <BarChart3 className="h-5 w-5 md:h-6 md:w-6 stroke-[2.5px]" />
+              </div>
+              <p className="text-xs md:text-sm font-semibold">Stats</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Analytics</p>
             </div>
           </Link>
         </div>

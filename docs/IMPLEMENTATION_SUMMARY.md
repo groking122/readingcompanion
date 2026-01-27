@@ -107,7 +107,7 @@ This document provides a comprehensive summary of **ALL** implementation work co
 
 ---
 
-#### Phase 3: Latest Features (This Session - 9 Tasks)
+#### Phase 3: Latest Features (This Session - 10 Tasks)
 **Goal:** Add production-ready features for scalability, analytics, and UX
 
 **Completed (In Order):**
@@ -165,12 +165,21 @@ This document provides a comprehensive summary of **ALL** implementation work co
 - Review attempt queue
 - Automatic sync when online
 
+**Task 10: Practice Again Feature** ✅
+- API endpoint to reset flashcards to be due immediately
+- "Practice Again" button on vocabulary cards
+- Bulk reset endpoint for recently reviewed words
+- "Practice Again" button on "All caught up!" screen
+- Smart reset: up to 50 words (or all if fewer)
+- Preserves progress (only changes dueAt, keeps algorithm state)
+
 **Impact:**
 - Production-ready application
 - Scalable to 10k+ vocabulary
 - Complete analytics and insights
 - Excellent mobile experience
 - Full offline capability
+- Flexible practice options without losing progress
 
 ### Key Decisions Made
 
@@ -389,7 +398,7 @@ This document provides a comprehensive summary of **ALL** implementation work co
 
 ---
 
-## 🎯 Phase 3: Latest Feature Additions (9 Tasks)
+## 🎯 Phase 3: Latest Feature Additions (10 Tasks)
 
 ### High Priority ✅
 
@@ -675,15 +684,62 @@ This document provides a comprehensive summary of **ALL** implementation work co
 
 ---
 
+### 10. Practice Again Feature ✅
+**Status:** COMPLETED
+**Files Modified:**
+- `app/api/flashcards/route.ts` (added POST and PUT endpoints)
+- `app/(protected)/vocab/page.tsx` (added "Practice Again" button)
+- `app/(protected)/review/page.tsx` (added bulk reset on "All caught up!" screen)
+
+**What was done:**
+- **Single Flashcard Reset (POST /api/flashcards):**
+  - Accepts `flashcardId` or `vocabularyId`
+  - Sets `dueAt` to current time (makes word due immediately)
+  - Preserves all algorithm state (easeFactor, interval, repetitions)
+  - Non-destructive - only changes due date, not progress
+
+- **Bulk Reset (PUT /api/flashcards):**
+  - Resets recently reviewed flashcards (smart default: up to 50 words)
+  - If user has fewer than 50 reviewed words, resets all of them
+  - Orders by most recently reviewed first
+  - Can accept custom count parameter
+
+- **Vocabulary Page Integration:**
+  - Added "Practice Again" button on vocabulary cards
+  - Shows when word is not currently due
+  - One-click to make word appear in review immediately
+  - Loading state during reset
+
+- **Review Page Integration:**
+  - Added "Practice Again" button on "All caught up!" screen
+  - Resets last 50 reviewed words (or all if fewer)
+  - Automatically refreshes flashcards after reset
+  - Success message shows count of reset words
+
+**Key Design Decision:**
+- **Preserves Progress:** Only changes `dueAt` timestamp
+- Does NOT reset: `easeFactor`, `interval`, `repetitions`, `lastReviewedAt`
+- When reviewed again, algorithm uses existing progress to calculate next due date
+- This is a "practice again" feature, not a "start over" feature
+
+**Benefits:**
+- Practice specific words again without waiting for due date
+- Bulk practice option when all words are completed
+- No progress loss - algorithm state preserved
+- Flexible practice sessions
+- Smart defaults (50 words = good session size)
+
+---
+
 ## Summary Statistics
 
-**Total Tasks:** 9
-**Completed:** 9 (High: 3, Medium: 3, Low: 3)
+**Total Tasks:** 10
+**Completed:** 10 (High: 3, Medium: 3, Low: 3, Additional: 1)
 **Remaining:** 0 ✅ ALL TASKS COMPLETE!
 
 **Files Created:** 7
-**Files Modified:** 8
-**Lines of Code Added:** ~2000+
+**Files Modified:** 10
+**Lines of Code Added:** ~2200+
 
 ---
 
@@ -825,6 +881,8 @@ This document provides a comprehensive summary of **ALL** implementation work co
 1. **`/api/vocabulary/distractors`** - Optimized vocabulary pool
 2. **`/api/reviews/stats`** - Review statistics
 3. **`/api/reviews/analytics`** - Advanced analytics
+4. **`POST /api/flashcards`** - Reset single flashcard to be due
+5. **`PUT /api/flashcards`** - Bulk reset recently reviewed flashcards
 
 ### New Components
 
@@ -918,6 +976,140 @@ While all planned tasks are complete, potential future enhancements include:
    - Cache invalidation strategies
    - Progressive loading
    - Background sync improvements
+
+---
+
+## 🔍 Review-Related Features Under Consideration
+
+The following review-related features have been identified but **not yet implemented**. These require review and decision on whether to implement in the future:
+
+### 1. Adaptive Difficulty ⚠️
+**Status:** UNDER REVIEW - Not Implemented
+
+**Description:**
+- Automatically adjust review difficulty based on user performance
+- Dynamically modify exercise selection and difficulty based on success rates
+- Personalize learning path for each user
+
+**Considerations:**
+- Would require algorithm modifications to SM-2 or additional layer
+- Need to define difficulty metrics and adjustment rules
+- May conflict with spaced repetition principles if not carefully designed
+- Could improve engagement for struggling users
+
+**Priority:** Medium  
+**Complexity:** High  
+**Impact:** Potentially high for user engagement
+
+---
+
+### 2. Voice Review ⚠️
+**Status:** UNDER REVIEW - Not Implemented
+
+**Description:**
+- Allow users to speak answers instead of typing
+- Speech recognition integration for pronunciation practice
+- Audio feedback for correct/incorrect answers
+
+**Considerations:**
+- Requires browser Speech Recognition API or third-party service
+- Cross-browser compatibility concerns (not all browsers support)
+- Privacy considerations (audio data handling)
+- Useful for pronunciation practice and accessibility
+- May require additional infrastructure for audio processing
+
+**Priority:** Medium  
+**Complexity:** High  
+**Impact:** High for pronunciation learning, accessibility
+
+---
+
+### 3. Speed Round ⚠️
+**Status:** UNDER REVIEW - Not Implemented
+
+**Description:**
+- Gamified review mode: answer as many words as possible in 60 seconds
+- Time pressure adds challenge and engagement
+- Leaderboard or personal best tracking
+
+**Considerations:**
+- May conflict with spaced repetition timing (quality vs speed)
+- Could be separate "practice mode" vs regular review
+- Gamification element may increase engagement
+- Need to ensure it doesn't compromise learning quality
+
+**Priority:** Low  
+**Complexity:** Medium  
+**Impact:** Medium for engagement, low for learning effectiveness
+
+---
+
+### 4. Time Trials ⚠️
+**Status:** UNDER REVIEW - Not Implemented
+
+**Description:**
+- Beat your best time for reviewing a set of words
+- Personal time records and improvement tracking
+- Competitive element with self-challenge
+
+**Considerations:**
+- Similar to Speed Round but focused on improvement over time
+- May encourage rushing through reviews (negative for learning)
+- Could be optional "challenge mode" separate from regular reviews
+- Requires careful design to maintain learning quality
+
+**Priority:** Low  
+**Complexity:** Medium  
+**Impact:** Medium for engagement, potentially negative for learning if rushed
+
+---
+
+### 5. Perfect Streaks ⚠️
+**Status:** UNDER REVIEW - Partially Implemented
+
+**Description:**
+- Track and display consecutive correct answers
+- Visual indicators for maintaining streaks
+- Rewards or achievements for streak milestones
+
+**Considerations:**
+- Basic streak tracking exists in stats dashboard (consecutive days)
+- Could extend to consecutive correct answers within sessions
+- May add pressure that affects learning quality
+- Gamification element that could increase engagement
+
+**Priority:** Low  
+**Complexity:** Low  
+**Impact:** Low-Medium for engagement
+
+---
+
+## 📋 Decision Framework for Future Features
+
+When evaluating these features for implementation, consider:
+
+1. **Learning Effectiveness:**
+   - Does it improve or maintain learning quality?
+   - Does it align with spaced repetition principles?
+
+2. **User Engagement:**
+   - Will it increase user motivation and retention?
+   - Does it add value without overwhelming users?
+
+3. **Technical Feasibility:**
+   - Is it technically achievable with current stack?
+   - What are the maintenance and infrastructure costs?
+
+4. **Resource Requirements:**
+   - Development time and complexity
+   - Ongoing maintenance burden
+   - User support requirements
+
+5. **User Feedback:**
+   - Do users request these features?
+   - What's the priority compared to other improvements?
+
+**Recommendation:** Review these features based on user feedback and learning effectiveness research before committing to implementation.
 
 ---
 
@@ -1050,6 +1242,14 @@ While all planned tasks are complete, potential future enhancements include:
 - Automatic sync when online
 - Review anywhere, anytime
 
+**10. Practice Again Feature** ✅
+- Reset flashcards to be due immediately
+- Single word reset from vocabulary page
+- Bulk reset from review completion screen
+- Smart defaults (up to 50 words)
+- Preserves all algorithm progress
+- Flexible practice without losing progress
+
 **Impact:** Production-ready, scalable, feature-rich platform
 
 ---
@@ -1074,6 +1274,7 @@ While all planned tasks are complete, potential future enhancements include:
 - Vocabulary word saving
 - SM-2 spaced repetition reviews
 - Library management
+- Practice Again (reset words without losing progress)
 
 **Performance Features:**
 - Distractor pool optimization
@@ -1092,6 +1293,7 @@ While all planned tasks are complete, potential future enhancements include:
 - Session time limits
 - Visual progress tracking
 - Review reminders
+- Practice Again (reset words without losing progress)
 - Responsive design
 
 **Reliability Features:**

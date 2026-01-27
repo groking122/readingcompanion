@@ -69,17 +69,41 @@ export async function POST(request: NextRequest) {
 
     // Prepare values - explicitly set all optional fields to null if empty/undefined
     // This ensures Drizzle inserts NULL instead of empty strings
-    const bookmarkValues = {
+    // Only include fields that have valid values to avoid sending undefined
+    const bookmarkValues: any = {
       userId: user.id,
       bookId,
-      title: (title && typeof title === 'string' && title.trim()) ? title.trim() : null,
-      epubLocation: (epubLocation && typeof epubLocation === 'string' && epubLocation.trim()) ? epubLocation.trim() : null,
-      pageNumber: (pageNumber !== undefined && pageNumber !== null && pageNumber !== '') 
-        ? (isNaN(Number(pageNumber)) ? null : Number(pageNumber))
-        : null,
-      position: (position !== undefined && position !== null && position !== '') 
-        ? (isNaN(Number(position)) ? null : Number(position))
-        : null,
+    }
+    
+    // Only add optional fields if they have valid values
+    if (title && typeof title === 'string' && title.trim()) {
+      bookmarkValues.title = title.trim()
+    }
+    
+    if (epubLocation && typeof epubLocation === 'string' && epubLocation.trim()) {
+      bookmarkValues.epubLocation = epubLocation.trim()
+    }
+    
+    if (pageNumber !== undefined && pageNumber !== null && pageNumber !== '' && !isNaN(Number(pageNumber))) {
+      const pageNum = Number(pageNumber)
+      if (pageNum > 0) {
+        bookmarkValues.pageNumber = pageNum
+      }
+    }
+    
+    if (position !== undefined && position !== null && position !== '' && !isNaN(Number(position))) {
+      const pos = Number(position)
+      if (pos > 0) {
+        bookmarkValues.position = pos
+      }
+    }
+    
+    // Ensure we have at least one location identifier
+    if (!bookmarkValues.epubLocation && !bookmarkValues.pageNumber && !bookmarkValues.position) {
+      return NextResponse.json(
+        { error: "Missing location data", message: "At least one location identifier (epubLocation, pageNumber, or position) is required" },
+        { status: 400 }
+      )
     }
 
     const [newBookmark] = await db

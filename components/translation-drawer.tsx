@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TranslationContent } from "./translation-content"
+import { useMediaQuery } from "@/lib/hooks/use-media-query"
 
 interface TranslationDrawerProps {
   isOpen: boolean
@@ -41,6 +42,7 @@ export function TranslationDrawer({
   onTranslationChange,
 }: TranslationDrawerProps) {
   const [mounted, setMounted] = useState(false)
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
 
   useEffect(() => {
     setMounted(true)
@@ -66,7 +68,7 @@ export function TranslationDrawer({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 z-[100] transition-opacity"
+        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] transition-opacity"
         onClick={onClose}
         aria-hidden="true"
         style={{ zIndex: 100 }}
@@ -75,13 +77,17 @@ export function TranslationDrawer({
       {/* Drawer - Bottom sheet for mobile only */}
       <div
         className={cn(
-          "theme-surface fixed bg-background shadow-xl transition-transform duration-300 ease-in-out",
+          "theme-surface fixed bg-background shadow-xl",
           // Mobile: bottom drawer (only visible on mobile)
           "bottom-0 left-0 right-0 max-h-[85vh] rounded-t-lg border-t",
           // Transform states
-          isOpen ? "translate-y-0" : "translate-y-full"
+          isOpen ? "translate-y-0" : "translate-y-full",
+          reducedMotion ? "" : "transition-transform duration-300 ease-in-out"
         )}
-        style={{ zIndex: 101 }}
+        style={{ 
+          zIndex: 101,
+          transition: reducedMotion ? "none" : "transform 300ms ease-in-out",
+        }}
       >
         <div className="flex flex-col h-full max-h-[85vh]">
           {/* Header */}

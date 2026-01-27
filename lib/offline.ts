@@ -155,11 +155,13 @@ class OfflineManager {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['reviewAttempts'], 'readonly')
       const store = transaction.objectStore('reviewAttempts')
-      const index = store.index('synced')
-      const request = index.getAll(IDBKeyRange.only(false)) // Get unsynced attempts
+      // IndexedDB doesn't support boolean keys in IDBKeyRange, so we get all and filter
+      const request = store.getAll()
 
       request.onsuccess = () => {
-        resolve(request.result)
+        // Filter to only unsynced attempts (synced === false)
+        const unsynced = request.result.filter((attempt: OfflineReviewAttempt) => attempt.synced === false)
+        resolve(unsynced)
       }
 
       request.onerror = () => {
@@ -197,22 +199,27 @@ class OfflineManager {
 
   /**
    * Sync queued attempts when online
+   * Returns sync result for user feedback
    */
-  async syncQueuedAttempts(): Promise<void> {
+  async syncQueuedAttempts(): Promise<{ synced: number; failed: number; failedIds: string[] }> {
     if (typeof navigator === 'undefined' || !navigator.onLine) {
-      return
+      return { synced: 0, failed: 0, failedIds: [] }
     }
 
     const queued = await this.getQueuedAttempts()
+    let synced = 0
+    let failed = 0
+    const failedIds: string[] = []
     
     for (const attempt of queued) {
       try {
         // Try to sync the attempt
-        const response = await fetch('/api/flashcards', {
-          method: 'PATCH',
+        const response = await fetch('/api/reviews', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             flashcardId: attempt.flashcardId,
+            vocabularyId: attempt.vocabularyId,
             quality: attempt.quality,
             responseMs: attempt.responseMs,
             exerciseType: attempt.exerciseType,
@@ -221,12 +228,20 @@ class OfflineManager {
 
         if (response.ok) {
           await this.markAttemptSynced(attempt.id)
+          synced++
+        } else {
+          failed++
+          failedIds.push(attempt.id)
         }
       } catch (error) {
         console.error('Failed to sync attempt:', error)
+        failed++
+        failedIds.push(attempt.id)
         // Keep attempt in queue for next sync
       }
     }
+
+    return { synced, failed, failedIds }
   }
 
   /**
@@ -239,12 +254,15 @@ class OfflineManager {
   /**
    * Register online/offline listeners
    */
-  registerListeners(): void {
+  registerListeners(onSyncComplete?: (result: { synced: number; failed: number; failedIds: string[] }) => void): void {
     if (typeof window === 'undefined') return
 
-    window.addEventListener('online', () => {
+    window.addEventListener('online', async () => {
       console.log('Back online, syncing queued attempts...')
-      this.syncQueuedAttempts()
+      const result = await this.syncQueuedAttempts()
+      if (onSyncComplete) {
+        onSyncComplete(result)
+      }
     })
 
     window.addEventListener('offline', () => {

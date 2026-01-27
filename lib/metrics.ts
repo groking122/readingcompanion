@@ -10,6 +10,8 @@ export type MetricType =
   | "review_attempt_logged"
   | "distractor_pool_fallback"
   | "session_conflict"
+  | "flashcard_reset"
+  | "flashcard_bulk_reset"
 
 export interface MetricData {
   type: MetricType
@@ -248,6 +250,8 @@ export function getMetricsSummary(windowMinutes: number = 60) {
     reviewAttemptsLogged: getMetrics("review_attempt_logged", since).length,
     distractorPoolFallbacks: getMetrics("distractor_pool_fallback", since).length,
     sessionConflicts: getMetrics("session_conflict", since).length,
+    flashcardResets: getMetrics("flashcard_reset", since).length,
+    flashcardBulkResets: getMetrics("flashcard_bulk_reset", since).length,
     errorCount: getErrorLogs(since).filter(log => log.level === "error").length,
     warningCount: getErrorLogs(since).filter(log => log.level === "warn").length,
   }

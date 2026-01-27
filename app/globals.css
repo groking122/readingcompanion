@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Open+Sans:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=Work+Sans:ital,wght@0,400;0,600;1,400&family=Poppins:ital,wght@0,400;0,600;1,400&family=Spectral:ital,wght@0,400;0,600;1,400&family=Literata:ital,wght@0,400;0,600;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -75,6 +77,90 @@
     --z-popover: 1060;
     --z-tooltip: 1070;
     --z-toast: 1080;
+    
+    /* Reading Page Tokens */
+    --reader-max-width: 720px; /* 60-75ch equivalent */
+    --reader-padding-desktop: 32px;
+    --reader-padding-mobile: 20px;
+    --reader-transition-fast: 120ms;
+    --reader-transition-normal: 180ms;
+    
+    /* Reading Theme Variables - Two-layer model */
+    --reading-bg-light: #ffffff;
+    --reading-bg-sepia: #f4ecd8;
+    --reading-bg-dark: #1a1a1a;
+    --reading-bg-paper: #faf8f3;
+    
+    --reading-text-light: #292B30;
+    --reading-text-sepia: #292B30;
+    --reading-text-dark: #e0e0e0;
+    --reading-text-paper: #292B30;
+    
+    /* Reading Surface Width */
+    --reading-width-comfort: 65ch;
+    --reading-width-wide: 75ch;
+    
+    /* Reader root CSS variables - default to light */
+    --reader-bg: #f6f6f6;
+    --reader-fg: #111;
+    --reader-paper: #ffffff;
+  }
+  
+  /* Reader root theme variants */
+  .reader-root[data-reader-theme="light"] {
+    --reader-bg: #f6f6f6;
+    --reader-fg: #111;
+    --reader-paper: #ffffff;
+  }
+  
+  .reader-root[data-reader-theme="sepia"] {
+    --reader-bg: #e9dfc7;
+    --reader-fg: #1b1b1b;
+    --reader-paper: #f4ecd8;
+  }
+  
+  .reader-root[data-reader-theme="dark"] {
+    --reader-bg: #0b0b0c;
+    --reader-fg: #eaeaea;
+    --reader-paper: #121214;
+  }
+  
+  .reader-root[data-reader-theme="paper"] {
+    --reader-bg: #faf8f3;
+    --reader-fg: #292B30;
+    --reader-paper: #ffffff;
+  }
+  
+  /* Reader theme variables - single source of truth */
+  .reader-root[data-reader-theme="light"] {
+    --reader-muted: #666;
+    --reader-border: #e0e0e0;
+  }
+  
+  .reader-root[data-reader-theme="sepia"] {
+    --reader-muted: #8b7355;
+    --reader-border: #d4c4a8;
+  }
+  
+  .reader-root[data-reader-theme="dark"] {
+    --reader-muted: #888;
+    --reader-border: #2a2a2a;
+  }
+  
+  .reader-root[data-reader-theme="paper"] {
+    --reader-muted: #666;
+    --reader-border: #d4c4a8;
+  }
+  
+  /* Paper mode wrapper */
+  .reader-paper-surface {
+    background: var(--reader-paper);
+    border: 1px solid var(--reader-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+    padding: 2rem;
+    max-width: 100%;
+    margin: 0 auto;
   }
 }
 
@@ -87,6 +173,18 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
   
   /* Improved typography scale */
@@ -595,13 +693,32 @@
   display: none;
 }
 
-/* EPUB Reader Styles */
-#react-reader {
-  height: 100%;
+/* EPUB Reader Styles - Force theme background, no white borders */
+#react-reader,
+#react-reader > div,
+[class*="react-reader"],
+[class*="epub-viewer"],
+[class*="epub-viewer"] > div {
+  height: 100% !important;
+  background-color: transparent !important;
 }
 
-#react-reader iframe {
-  border: none;
+#react-reader iframe,
+[class*="react-reader"] iframe {
+  border: none !important;
+  background-color: transparent !important;
+}
+
+/* Override any white backgrounds from react-reader library */
+#react-reader *,
+[class*="react-reader"] * {
+  background-color: transparent !important;
+}
+
+/* But allow theme background to be set via inline styles */
+#react-reader[style*="background"],
+[class*="react-reader"][style*="background"] {
+  background-color: var(--reading-bg-light, transparent) !important;
 }
 
 /* Custom EPUB reader variables */
@@ -616,6 +733,21 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Google Fonts - loaded via Next.js font optimization */
+/* Fonts are available via CSS variables and can be used directly in style props */
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Theme transitions - synchronized across major surfaces - liquid feel */
 html, body {
   background-color: var(--c-canvas);
@@ -626,6 +758,13 @@ html, body {
   will-change: background-color, color;
   /* Force immediate synchronization */
   transition-delay: 0s;
+}
+
+/* Respect reduced motion for theme transitions */
+@media (prefers-reduced-motion: reduce) {
+  html, body {
+    transition: none;
+  }
 }
 
 /* Apply theme transitions to major "surfaces" only - synchronized timing */
@@ -891,18 +1030,24 @@ button[title*="Toggle theme"] {
   background-color: hsl(var(--background));
 }
 
-/* Unknown word highlighting for text content */
+/* Unknown word highlighting for text content - very subtle, invisible by default */
 .unknown-word-text {
-  background-color: rgba(234, 179, 8, 0.25);
-  border-bottom: 2px solid rgba(234, 179, 8, 0.6);
+  /* Very subtle highlight - only visible on close inspection */
+  background-color: rgba(147, 51, 234, 0.12);
+  border-bottom: 1px solid rgba(147, 51, 234, 0.25);
   padding-bottom: 1px;
-  cursor: pointer;
   transition: background-color 0.2s ease;
   border-radius: 2px;
 }
 
-.unknown-word-text:hover {
-  background-color: rgba(234, 179, 8, 0.4);
+/* Only show cursor and stronger hover on desktop (not touch devices) */
+@media (hover: hover) and (pointer: fine) {
+  .unknown-word-text {
+    cursor: pointer;
+  }
+  .unknown-word-text:hover {
+    background-color: rgba(147, 51, 234, 0.2);
+  }
 }
 
 /* Settings panel animations */

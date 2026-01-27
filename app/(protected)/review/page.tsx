@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useReducer } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Clock } from "lucide-react"
-import { RotateCcw, Loader2 } from "lucide-react"
+import { RotateCcw, Loader2, RefreshCw } from "lucide-react"
 import { 
   generateExercise, 
   generateMatchingPairsExercise,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/exercises"
 import { trackMetric, logError, logWarning } from "@/lib/metrics"
 import { offlineManager } from "@/lib/offline"
+import { toast } from "@/lib/toast"
 
 // Exercise state machine
 type ExerciseState = 
@@ -91,16 +92,117 @@ export default function ReviewPage() {
   const [timeLimit, setTimeLimit] = useState<number | null>(null) // Time limit in minutes (null = no limit)
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null) // Time remaining in seconds
   const [showTimeLimitSelector, setShowTimeLimitSelector] = useState(false)
+  const [resettingRecent, setResettingRecent] = useState(false)
   
   // Derived state from exercise state machine
   const currentExercise = exerciseState.type === 'ready' ? exerciseState.exercise : null
   const isMatchingPairs = exerciseState.type === 'ready' ? exerciseState.isMatchingPairs : false
   const matchingPairsFlashcardIds = exerciseState.type === 'ready' ? exerciseState.flashcardIds : []
 
+  // Fetch functions - declared before useEffects that depend on them
+  // Fetch functions - declared before useEffects that depend on them
+  const fetchDueFlashcards = useCallback(async () => {
+    try {
+      const res = await fetch("/api/flashcards?due=true")
+      if (!res.ok) throw new Error("Failed to fetch")
+      
+      const data = await res.json()
+      const cards = Array.isArray(data) ? data : []
+      
+      setFlashcards(cards)
+      setLoading(false)
+      
+      // Reset to beginning if we have new flashcards
+      if (cards.length > 0) {
+        setCurrentIndex(0)
+        setConsumedFlashcards(0)
+        setLastActivityAt(new Date())
+        
+        // Cache flashcards for offline use
+        if (offlineManager.isOnline()) {
+          await offlineManager.cacheFlashcards(
+            cards.map((fc: any) => ({
+              id: fc.flashcard.id,
+              flashcard: fc.flashcard,
+              vocabulary: fc.vocabulary,
+              cachedAt: Date.now(), // Required by CachedFlashcard type
+            }))
+          )
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching flashcards:", error)
+      
+      // Try to load from cache if offline
+      if (!offlineManager.isOnline()) {
+        try {
+          const cached = await offlineManager.getCachedFlashcards()
+          if (cached.length > 0) {
+            setFlashcards(
+              cached.map((c) => ({
+                flashcard: c.flashcard,
+                vocabulary: c.vocabulary,
+              }))
+            )
+            setCurrentIndex(0)
+            setConsumedFlashcards(0)
+          }
+        } catch (cacheError) {
+          console.error("Error loading cached flashcards:", cacheError)
+        }
+      }
+      
+      setLoading(false)
+      setFlashcards([])
+    }
+  }, [])
+
+  const fetchAllVocab = useCallback(async () => {
+    try {
+      // First, try distractor pool endpoint (optimized for performance)
+      let vocabItems: VocabularyItem[] = []
+      let usedDistractorPool = false
+      
+      try {
+        const distractorRes = await fetch("/api/vocabulary/distractors?count=200")
+        if (distractorRes.ok) {
+          const distractorData = await distractorRes.json()
+          // Transform to VocabularyItem format
+          vocabItems = distractorData.map((item: any) => ({
+            id: item.id,
+            term: item.term,
+            termNormalized: item.termNormalized,
+            translation: item.translation,
+            context: item.context,
+            kind: item.kind || "word",
+            bookId: item.bookId,
+          }))
+          usedDistractorPool = true
+        }
+      } catch (distractorError) {
+        console.debug("Distractor pool fetch failed, falling back to full vocabulary:", distractorError)
+      }
+      
+      // Fallback to full vocabulary if distractor pool failed
+      if (!usedDistractorPool) {
+        const res = await fetch("/api/vocabulary")
+        if (!res.ok) throw new Error("Failed to fetch")
+        
+        const data = await res.json()
+        vocabItems = Array.isArray(data) ? data : []
+      }
+      
+      setAllVocab(vocabItems)
+    } catch (error) {
+      console.error("Error fetching vocabulary:", error)
+      setAllVocab([])
+    }
+  }, [])
+
   useEffect(() => {
     fetchDueFlashcards()
     fetchAllVocab()
-  }, [])
+  }, [fetchDueFlashcards, fetchAllVocab])
   
   // Show time limit selector when flashcards are first loaded
   useEffect(() => {
@@ -335,125 +437,46 @@ export default function ReviewPage() {
     return () => clearInterval(checkStuckSession)
   }, [lastActivityAt, sessionStartedAt, flashcards.length, consumedFlashcards])
 
-  const fetchDueFlashcards = async () => {
+  const handleResetRecent = useCallback(async () => {
+    setResettingRecent(true)
     try {
-      const res = await fetch("/api/flashcards?due=true")
-      if (!res.ok) throw new Error("Failed to fetch")
+      const res = await fetch("/api/flashcards", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}), // Use smart default (50 or all if fewer)
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: "Failed to reset flashcards" }))
+        throw new Error(error.error || "Failed to reset flashcards")
+      }
+
+      const result = await res.json()
       
-      const data = await res.json()
-      setFlashcards(data)
-      setCurrentIndex(0)
-      setConsumedFlashcards(0) // Reset consumed count when fetching new flashcards
+      // Refresh flashcards to show the reset ones
+      await fetchDueFlashcards()
       
-      // Cache flashcards for offline use
-      if (offlineManager.isOnline()) {
-        await offlineManager.cacheFlashcards(
-          data.map((fc: any) => ({
-            id: fc.flashcard.id,
-            flashcard: fc.flashcard,
-            vocabulary: fc.vocabulary,
-          }))
+      if (result.resetCount > 0) {
+        toast.success(
+          "Ready to practice!",
+          `Reset ${result.resetCount} recently reviewed ${result.resetCount === 1 ? 'word' : 'words'}.`
+        )
+      } else {
+        toast.error(
+          "No words to reset",
+          "You don't have any recently reviewed words to practice again."
         )
       }
     } catch (error) {
-      console.error("Error fetching flashcards:", error)
-      
-      // Try to load from cache if offline
-      if (!offlineManager.isOnline()) {
-        try {
-          const cached = await offlineManager.getCachedFlashcards()
-          if (cached.length > 0) {
-            setFlashcards(
-              cached.map((c) => ({
-                flashcard: c.flashcard,
-                vocabulary: c.vocabulary,
-              }))
-            )
-            setCurrentIndex(0)
-            setConsumedFlashcards(0)
-          }
-        } catch (cacheError) {
-          console.error("Error loading cached flashcards:", cacheError)
-        }
-      }
+      console.error("Error resetting recent flashcards:", error)
+      toast.error(
+        "Failed to reset",
+        error instanceof Error ? error.message : "Could not reset flashcards. Please try again."
+      )
     } finally {
-      setLoading(false)
+      setResettingRecent(false)
     }
-  }
-
-  const fetchAllVocab = async () => {
-    try {
-      // First, try distractor pool endpoint (optimized for performance)
-      let vocabItems: VocabularyItem[] = []
-      let usedDistractorPool = false
-      
-      try {
-        const distractorRes = await fetch("/api/vocabulary/distractors?count=200")
-        if (distractorRes.ok) {
-          const distractorData = await distractorRes.json()
-          // Transform to VocabularyItem format
-          vocabItems = distractorData.map((item: any) => ({
-            id: item.id,
-            term: item.term,
-            termNormalized: item.termNormalized,
-            translation: item.translation,
-            context: item.context,
-            kind: item.kind || "word",
-            bookId: item.bookId,
-            epubLocation: item.epubLocation,
-            pageNumber: item.pageNumber,
-          }))
-          
-          // Check if we have enough items for good distractor variety
-          // If we have fewer than 50 items, fallback to full fetch
-          if (vocabItems.length >= 50) {
-            usedDistractorPool = true
-            setAllVocab(vocabItems)
-            return
-          } else {
-            console.warn(`Distractor pool returned only ${vocabItems.length} items, falling back to full fetch`)
-            trackMetric("distractor_pool_fallback", {
-              sessionId: sessionStartedAt,
-              metadata: { reason: "insufficient_items", count: vocabItems.length },
-            })
-          }
-        } else {
-          console.warn("Distractor pool request failed, falling back to full fetch")
-          trackMetric("distractor_pool_fallback", {
-            sessionId: sessionStartedAt,
-            metadata: { reason: "request_failed", status: distractorRes.status },
-          })
-        }
-      } catch (distractorError) {
-        console.warn("Error fetching distractor pool, falling back to full fetch:", distractorError)
-        trackMetric("distractor_pool_fallback", {
-          sessionId: sessionStartedAt,
-          metadata: { reason: "exception", error: distractorError instanceof Error ? distractorError.message : String(distractorError) },
-        })
-      }
-      
-      // Fallback to full vocabulary fetch
-      if (!usedDistractorPool) {
-        const res = await fetch("/api/vocabulary")
-        const data = await res.json()
-        // Transform to VocabularyItem format
-        vocabItems = data.map((item: any) => ({
-          id: item.id,
-          term: item.term,
-          termNormalized: item.termNormalized,
-          translation: item.translation,
-          context: item.context,
-          kind: item.kind || "word",
-          bookId: item.bookId,
-          epubLocation: item.epubLocation,
-          pageNumber: item.pageNumber,
-        }))
-        setAllVocab(vocabItems)
-      }
-    } catch (error) {
-      console.error("Error fetching vocabulary:", error)
-    }
-  }
+  }, [fetchDueFlashcards])
 
 
   const convertAnswerToQuality = (isCorrect: boolean, timeMs: number): number => {
@@ -698,8 +721,26 @@ export default function ReviewPage() {
             Your reading companion for learning English
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              size="default"
+              className="font-medium shadow-soft hover:shadow-elevated transition-all"
+              onClick={handleResetRecent}
+              disabled={resettingRecent}
+            >
+              {resettingRecent ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Practice Again
+                </>
+              )}
+            </Button>
             <a href="/library">
-              <Button size="default" className="font-medium shadow-soft hover:shadow-elevated transition-all">
+              <Button variant="outline" size="default" className="font-medium">
                 Continue Reading
               </Button>
             </a>

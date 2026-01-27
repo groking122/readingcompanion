@@ -41,10 +41,13 @@
   - WCAG 2.5.8 compliant (24×24px minimum, Material 48×48dp recommended)
 
 ### 6. PDF Handling
-- **Status**: ⚠️ NEEDS IMPROVEMENT
-- **Current**: PDFs are extracted to text on upload
-- **Issue**: No friendly message for scanned PDFs (no selectable text)
-- **Fix Needed**: Detect empty text extraction and show helpful message
+- **Status**: ✅ PASS
+- **Implementation**: PDFs are extracted to text on upload
+- **Features**:
+  - Detects scanned PDFs (image-based, no selectable text)
+  - Shows friendly error message with helpful guidance
+  - Suggests using EPUB files or PDFs with selectable text
+  - Handles extraction failures gracefully
 
 ## 🔧 Fixes Applied
 
@@ -67,9 +70,11 @@
 
 ## 📋 Remaining Tasks
 
-1. **PDF Error Handling**: Add friendly message for scanned PDFs
-2. **Keyboard Shortcuts**: Add power user shortcuts (S save, K known, A settings, Esc close)
-3. **Popover Positioning**: Ensure never covers selected word (smart positioning)
-4. **EPUB TOC**: Add table of contents navigation
-5. **Progress Bar**: Show reading progress for EPUBs
+✅ **All tasks completed!**
+
+1. ✅ **PDF Error Handling**: Friendly messages for scanned PDFs implemented
+2. ✅ **Keyboard Shortcuts**: Power user shortcuts implemented (S, K, A, Esc, C, B, R, ?, arrows)
+3. ✅ **Popover Positioning**: Smart positioning ensures popover never covers selected word
+4. ✅ **EPUB TOC**: Table of contents navigation fully implemented
+5. ✅ **Progress Bar**: Reading progress display for EPUBs implemented
 

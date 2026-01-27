@@ -6,7 +6,7 @@ import { eq, inArray } from "drizzle-orm"
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await currentUser()
@@ -14,7 +14,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const bookId = params.id
+    const { id: bookId } = await params
 
     if (!bookId) {
       return NextResponse.json(
@@ -64,6 +64,7 @@ export async function DELETE(
     )
   }
 }
+
 
 
 

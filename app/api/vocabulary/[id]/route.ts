@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm"
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await currentUser()
@@ -14,7 +14,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const vocabId = params.id
+    const { id: vocabId } = await params
 
     // Verify the vocabulary item belongs to the user
     const vocabItem = await db

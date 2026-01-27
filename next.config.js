@@ -31,9 +31,7 @@ const nextConfig = {
     return config;
   },
   // Allow ESM packages
-  experimental: {
-    serverComponentsExternalPackages: ['pdfjs-dist', 'pdf-parse'],
-  },
+  serverExternalPackages: ['pdfjs-dist', 'pdf-parse'],
 }
 
 module.exports = nextConfig

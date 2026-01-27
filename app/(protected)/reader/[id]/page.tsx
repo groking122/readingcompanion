@@ -12,7 +12,15 @@ import { TocDrawer, type TocItem } from "@/components/toc-drawer"
 import { TranslationDrawer } from "@/components/translation-drawer"
 import { TranslationPopover } from "@/components/translation-popover"
 import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
+import { ReaderTopBar } from "@/components/reader-top-bar"
+import { ReadingProgressIndicator } from "@/components/reading-progress-indicator"
+import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overlay"
+import { ReaderErrorBoundary } from "@/components/reader-error-boundary"
+import { ReaderThemeSync } from "@/components/reader-theme-sync"
+import { getCurrentThemeIndex, isBlackWhiteActive } from "@/lib/theme-controller"
 import { toast } from "@/lib/toast"
+import { useIsMobile } from "@/lib/hooks/use-media-query"
+import { createFingerprint, getCachedLocations, saveCachedLocations, type LayoutFingerprint } from "@/lib/epub-locations-cache"
 
 // Helper function to mark vocabulary words in text
 function markUnknownWords(text: string, knownWords: Set<string>, vocabularyWords: Set<string>, hasKnownWords: boolean): React.ReactNode[] {
@@ -147,6 +155,63 @@ function SearchHighlight({ searchTerm }: { searchTerm: string }) {
   return null
 }
 
+// Helper functions for reader settings
+const getBookSettingsKey = (bookId: string) => `reader_settings_${bookId}`
+
+const getReaderSurfaceTheme = (): "light" | "sepia" | "dark" | "paper" => {
+  if (typeof window === "undefined") return "light"
+  
+  // Check global theme - Jet Black (index 4) = dark, others = light
+  if (isBlackWhiteActive()) return "light"
+  const currentIndex = getCurrentThemeIndex()
+  return currentIndex === 4 ? "dark" : "light"
+}
+
+const loadBookSettings = (bookId: string) => {
+  try {
+    const saved = localStorage.getItem(getBookSettingsKey(bookId))
+    if (saved) {
+      const settings = JSON.parse(saved)
+      return {
+        fontSize: settings.fontSize || 16,
+        fontFamily: settings.fontFamily || "Inter",
+        lineHeight: settings.lineHeight || 1.6,
+        readingWidth: settings.readingWidth || "comfort",
+        paragraphSpacing: settings.paragraphSpacing || 1.5,
+        theme: settings.theme || getReaderSurfaceTheme(),
+        distractionFree: settings.distractionFree || false,
+      }
+    }
+  } catch (e) {
+    console.error("Error loading book settings:", e)
+  }
+  return {
+    fontSize: 16,
+    fontFamily: "Inter",
+    lineHeight: 1.6,
+    readingWidth: "comfort" as const,
+    paragraphSpacing: 1.5,
+    theme: getReaderSurfaceTheme(),
+    distractionFree: false,
+  }
+}
+
+const saveBookSettings = (bookId: string, settings: {
+  fontSize: number
+  fontFamily: string
+  lineHeight: number
+  readingWidth: "comfort" | "wide"
+  paragraphSpacing: number
+  theme: "light" | "sepia" | "dark" | "paper"
+  distractionFree: boolean
+}) => {
+  try {
+    localStorage.setItem(getBookSettingsKey(bookId), JSON.stringify(settings))
+  } catch (e) {
+    console.error("Error saving book settings:", e)
+  }
+}
+
 interface Book {
   id: string
   title: string
@@ -182,14 +247,42 @@ export default function ReaderPage() {
   const [selectedContext, setSelectedContext] = useState<string>("")
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number; width: number; height: number } | undefined>(undefined)
-  const [isMobile, setIsMobile] = useState(false)
+  // Mobile detection using media queries (pointer:coarse + max-width)
+  const isMobile = useIsMobile()
   const [saving, setSaving] = useState(false)
+
   const [fontSize, setFontSize] = useState(16)
   const [fontFamily, setFontFamily] = useState("Inter")
   const [lineHeight, setLineHeight] = useState(1.6)
-  const [maxWidth, setMaxWidth] = useState(66) // ch units - optimal reading width
+  const [readingWidth, setReadingWidth] = useState<"comfort" | "wide">("comfort") // Reading width preset
   const [paragraphSpacing, setParagraphSpacing] = useState(1.5) // rem
-  const [theme, setTheme] = useState<"light" | "sepia" | "dark" | "paper">("light")
+  // Derive initial theme from global theme
+  const [theme, setTheme] = useState<"light" | "sepia" | "dark" | "paper">(() => {
+    if (typeof window === "undefined") return "light"
+    if (isBlackWhiteActive()) return "light"
+    const currentIndex = getCurrentThemeIndex()
+    return currentIndex === 4 ? "dark" : "light"
+  })
+  
+  // Sync theme to global theme changes
+  useEffect(() => {
+    const handleThemeChange = () => {
+      if (isBlackWhiteActive()) {
+        setTheme("light")
+      } else {
+        const currentIndex = getCurrentThemeIndex()
+        setTheme(currentIndex === 4 ? "dark" : "light")
+      }
+    }
+    
+    window.addEventListener('theme-change', handleThemeChange)
+    window.addEventListener('storage', handleThemeChange)
+    
+    return () => {
+      window.removeEventListener('theme-change', handleThemeChange)
+      window.removeEventListener('storage', handleThemeChange)
+    }
+  }, [])
   const [distractionFree, setDistractionFree] = useState(false)
   const [location, setLocation] = useState<string | number>(0)
   const [epubUrl, setEpubUrl] = useState<string | null>(null)
@@ -198,6 +291,7 @@ export default function ReaderPage() {
   const bookRef = useRef<any>(null)
   const [currentLocation, setCurrentLocation] = useState<string | number>(0)
   const [currentPage, setCurrentPage] = useState<number | null>(null)
+  const [totalPages, setTotalPages] = useState<number | null>(null) // For text books
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [savedWordId, setSavedWordId] = useState<string | null>(null)
@@ -211,11 +305,145 @@ export default function ReaderPage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
-  const [headerMinimized, setHeaderMinimized] = useState(false)
   const [knownWords, setKnownWords] = useState<Set<string>>(new Set())
   const [vocabularyWords, setVocabularyWords] = useState<Set<string>>(new Set()) // Words saved to vocabulary (not marked as known)
   const [hasKnownWordsData, setHasKnownWordsData] = useState(false)
+  const bookContentRef = useRef<HTMLDivElement | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const epubContainerRef = useRef<HTMLDivElement | null>(null) // Container for EPUB reader
+  const lastLocRef = useRef<string | number | null>(null) // Track last location for EPUB
+  const locationsReadyRef = useRef(false) // Track if EPUB locations are ready
   const router = useRouter()
+  
+  // Track container dimensions for layout fingerprint
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+  // Normalize percentage: handles both 0..1 and 0..100 formats
+  const normalizeToFraction = useCallback((value: number) => {
+    // If it's already 0..1 keep it, if it's 0..100 convert to 0..1
+    if (value > 1) return Math.min(1, Math.max(0, value / 100))
+    return Math.min(1, Math.max(0, value))
+  }, [])
+
+  // Update EPUB pages from location
+  const updateEpubPagesFromLoc = useCallback((loc: string | number, bookObj: any) => {
+    try {
+      const locations = bookObj?.locations
+      if (!locations || !locations.total || Number(locations.total) === 0) {
+        return
+      }
+
+      const total = Number(locations.total)
+      
+      // Get percentage from CFI
+      let percentage = 0
+      if (typeof loc === "string") {
+        try {
+          const p = locations.percentageFromCfi(loc)
+          percentage = normalizeToFraction(Number(p) || 0)
+        } catch (e) {
+          console.debug("Error getting percentage from CFI:", e)
+          return
+        }
+      } else {
+        percentage = normalizeToFraction(loc)
+      }
+
+      // Calculate page: location index (0-based) + 1
+      // Use locationFromCfi if available, otherwise estimate from percentage
+      let locationIndex = 0
+      if (typeof loc === "string") {
+        try {
+          // Try to get location index directly from CFI
+          if (typeof locations.locationFromCfi === 'function') {
+            locationIndex = locations.locationFromCfi(loc) || 0
+          } else {
+            // Fallback: estimate from percentage
+            locationIndex = Math.floor(percentage * total)
+          }
+        } catch (e) {
+          // Fallback: estimate from percentage
+          locationIndex = Math.floor(percentage * total)
+        }
+      } else {
+        locationIndex = Math.floor(percentage * total)
+      }
+
+      const calculatedPage = Math.max(1, Math.min(total, locationIndex + 1))
+      const calculatedProgress = percentage * 100
+
+      setTotalPages(total)
+      setCurrentPage(calculatedPage)
+      setReadingProgress(Math.max(0, Math.min(100, calculatedProgress)))
+    } catch (e) {
+      console.debug("Error in updateEpubPagesFromLoc:", e)
+    }
+  }, [normalizeToFraction])
+
+  // Ensure EPUB locations are generated
+  const ensureEpubLocations = useCallback(async (bookObj: any, layoutFingerprint?: LayoutFingerprint) => {
+    if (!bookObj?.locations) return
+
+    // Create fingerprint from current layout if provided
+    let fingerprint: string | null = null
+    if (layoutFingerprint) {
+      fingerprint = createFingerprint(layoutFingerprint)
+      
+      // Check cache first
+      const cached = await getCachedLocations(bookId, fingerprint)
+      if (cached && cached.total > 0) {
+        setTotalPages(cached.total)
+        locationsReadyRef.current = true
+        // Re-apply last known location
+        if (lastLocRef.current != null) {
+          updateEpubPagesFromLoc(lastLocRef.current, bookObj)
+        }
+        return
+      }
+    }
+
+    // Wait until the book is actually ready/opened
+    if (bookObj.ready && typeof bookObj.ready === 'function') {
+      try {
+        await bookObj.ready()
+      } catch (e) {
+        console.debug("Book ready promise failed:", e)
+      }
+    }
+
+    const locations = bookObj.locations
+    const hasTotal = locations?.total != null && Number(locations.total) > 0
+    const hasLen = typeof locations?.length === "function" && locations.length() > 0
+
+    if (!hasTotal || !hasLen) {
+      try {
+        // Generate locations - use epubjs default granularity
+        // Don't pass target count - let epubjs calculate optimal granularity
+        await locations.generate()
+        
+        // Cache the result if we have a fingerprint
+        if (fingerprint && locations.total) {
+          await saveCachedLocations(bookId, fingerprint, Number(locations.total))
+        }
+        
+        console.log("EPUB locations generated:", locations.total)
+      } catch (e) {
+        console.debug("Error generating locations:", e)
+        return
+      }
+    }
+
+    locationsReadyRef.current = true
+    const total = Number(locations.total) || 0
+    if (total > 0) {
+      setTotalPages(total)
+    }
+
+    // Re-apply last known location so currentPage stops being null
+    if (lastLocRef.current != null) {
+      updateEpubPagesFromLoc(lastLocRef.current, bookObj)
+    }
+  }, [bookId, updateEpubPagesFromLoc])
   
   // Auto-save progress refs
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -270,6 +498,92 @@ export default function ReaderPage() {
     }
   }, [book, currentPage])
 
+  // Handle initial page navigation from URL for text books
+  useEffect(() => {
+    if (book?.type === "text" && initialPage && scrollContainerRef.current && bookContentRef.current) {
+      const pageNum = parseInt(initialPage)
+      if (!isNaN(pageNum) && pageNum > 0) {
+        // Wait for content to render, then scroll
+        setTimeout(() => {
+          const container = scrollContainerRef.current
+          if (container && bookContentRef.current) {
+            const containerHeight = container.clientHeight
+            const scrollPosition = (pageNum - 1) * containerHeight
+            container.scrollTo({
+              top: scrollPosition,
+              behavior: 'auto'
+            })
+            setCurrentPage(pageNum)
+          }
+        }, 500)
+      }
+    }
+  }, [book?.type, initialPage])
+
+  // Calculate page numbers for text books based on scroll position
+  // Uses ResizeObserver to handle font size changes, dynamic content, etc.
+  const calculatePages = useCallback(() => {
+    const contentEl = bookContentRef.current
+    const container = scrollContainerRef.current
+    if (!contentEl || !container) return
+
+    const containerHeight = container.clientHeight
+    const contentHeight = contentEl.scrollHeight
+    const scrollTop = container.scrollTop
+
+    // Guard against invalid measurements
+    if (containerHeight <= 0 || contentHeight <= 0) return
+
+    // Estimate pages based on content height vs container height
+    // Each "page" is roughly one viewport height
+    const estimatedTotalPages = Math.max(1, Math.ceil(contentHeight / containerHeight))
+    setTotalPages(estimatedTotalPages)
+
+    // Calculate current page based on scroll position
+    const currentPageNum = Math.max(
+      1,
+      Math.min(estimatedTotalPages, Math.floor(scrollTop / containerHeight) + 1)
+    )
+    setCurrentPage(currentPageNum)
+
+    // Calculate reading progress (avoid division by zero)
+    const denom = Math.max(1, contentHeight - containerHeight)
+    const progress = Math.min(100, Math.max(0, (scrollTop / denom) * 100))
+    setReadingProgress(progress)
+  }, [])
+
+  // Use useLayoutEffect to run immediately after layout, and ResizeObserver for changes
+  useEffect(() => {
+    if (book?.type !== "text" || !book.content) return
+
+    const contentEl = bookContentRef.current
+    const container = scrollContainerRef.current
+    if (!contentEl || !container) return
+
+    // Run once right after layout using requestAnimationFrame
+    const raf = requestAnimationFrame(() => {
+      calculatePages()
+    })
+
+    // Use ResizeObserver to detect content/viewport changes (font size, dynamic content, etc.)
+    const resizeObserver = new ResizeObserver(() => {
+      calculatePages()
+    })
+    resizeObserver.observe(container)
+    resizeObserver.observe(contentEl)
+
+    // Also listen to scroll events
+    container.addEventListener('scroll', calculatePages, { passive: true })
+    window.addEventListener('resize', calculatePages, { passive: true })
+
+    return () => {
+      cancelAnimationFrame(raf)
+      resizeObserver.disconnect()
+      container.removeEventListener('scroll', calculatePages)
+      window.removeEventListener('resize', calculatePages)
+    }
+  }, [book?.type, book?.content, fontSize, lineHeight, readingWidth, calculatePages])
+
   // Auto-save for PDF and text books when page changes
   useEffect(() => {
     if (book && (book.type === "pdf" || book.type === "text") && currentPage !== null) {
@@ -278,12 +592,14 @@ export default function ReaderPage() {
         clearTimeout(autoSaveTimerRef.current)
       }
       
-      // Estimate progress for PDF/text (we don't have total pages, so estimate)
-      const estimatedProgress = currentPage > 50 ? Math.min(80, (currentPage / 100) * 100) : Math.max(5, currentPage * 2)
+      // For text books, use actual progress; for PDF, estimate
+      const progress = book.type === "text" && readingProgress > 0 
+        ? readingProgress 
+        : (currentPage > 50 ? Math.min(80, (currentPage / 100) * 100) : Math.max(5, currentPage * 2))
       
       // Debounce auto-save
       autoSaveTimerRef.current = setTimeout(() => {
-        autoSaveProgress(currentPage, estimatedProgress)
+        autoSaveProgress(currentPage, progress)
       }, 3000)
     }
     
@@ -292,7 +608,7 @@ export default function ReaderPage() {
         clearTimeout(autoSaveTimerRef.current)
       }
     }
-  }, [book, currentPage])
+  }, [book, currentPage, readingProgress])
 
   // Save progress on unmount
   useEffect(() => {
@@ -312,15 +628,7 @@ export default function ReaderPage() {
     }
   }, [book, currentLocation, readingProgress, currentPage])
 
-  // Detect mobile screen size
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768) // md breakpoint
-    }
-    checkMobile()
-    window.addEventListener("resize", checkMobile)
-    return () => window.removeEventListener("resize", checkMobile)
-  }, [])
+  // Mobile detection is now handled by useIsMobile hook
 
   // Helper function to normalize text (trim, collapse whitespace)
   const normalizeText = (text: string): string => {
@@ -339,6 +647,192 @@ export default function ReaderPage() {
     const wordCount = countWords(text)
     return wordCount >= 2 && wordCount <= 6
   }
+
+  const handleSaveWord = useCallback(async () => {
+    console.log("handleSaveWord called", { selectedText, translation, book: book?.id })
+    
+    if (!selectedText || !translation || !book) {
+      console.error("Missing required fields:", { selectedText: !!selectedText, translation: !!translation, book: !!book })
+      toast.error("Missing information", "Please select a word and wait for translation.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      console.log("Starting save process...")
+      // Ensure we always have a context - use selectedText as fallback
+      let context = selectedContext?.trim() || selectedText.trim()
+      
+      // For non-EPUB, try to get better context if we don't have it
+      if (book.type !== "epub" && (!selectedContext || selectedContext === selectedText)) {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          const container = range.commonAncestorContainer
+          if (container.parentElement) {
+            const parentText = container.parentElement.textContent || ""
+            const startOffset = Math.max(0, range.startOffset - 100)
+            const endOffset = Math.min(parentText.length, range.endOffset + 100)
+            const extractedContext = parentText.substring(startOffset, endOffset).trim()
+            if (extractedContext && extractedContext.length > selectedText.length) {
+              context = extractedContext
+            }
+          }
+        }
+      }
+
+      // Ensure context is not empty - fallback to selectedText
+      if (!context || context.trim().length === 0) {
+        context = selectedText.trim()
+      }
+
+      // For EPUB, store location and page; for others, calculate position
+      let position: number | null = null
+      let epubLocation: string | null = null
+      let pageNumber: number | null = null
+      
+      if (book.type === "epub") {
+        // Store EPUB location (CFI format)
+        epubLocation = typeof currentLocation === "string" ? currentLocation : String(currentLocation)
+        // Use current page if available
+        pageNumber = currentPage
+      } else {
+        // For text content, calculate character position
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          const container = range.commonAncestorContainer
+          if (container.parentElement) {
+            position = range.startOffset
+          }
+        }
+      }
+
+      const payload = {
+        term: selectedText.trim(),
+        translation: translation.trim(),
+        context: context.trim(),
+        bookId: book.id,
+        position,
+        epubLocation,
+        pageNumber,
+      }
+      
+      console.log("Sending save request:", payload)
+      
+      const response = await fetch("/api/vocabulary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      
+      console.log("Response status:", response.status, response.statusText)
+
+      if (response.ok) {
+        const data = await response.json()
+        setSavedWordId(data.id)
+        
+        // Add word to vocabulary words set so it gets highlighted immediately
+        const normalized = selectedText.trim().toLowerCase().replace(/[^\w]/g, "")
+        if (normalized.length > 0) {
+          setVocabularyWords(prev => {
+            const newSet = new Set(prev)
+            newSet.add(normalized)
+            return newSet
+          })
+        }
+        
+        // Show toast notification
+        const isPhrase = selectedText.split(/\s+/).length > 1
+        toast.success(
+          isPhrase ? "Phrase saved!" : "Word saved!",
+          `${selectedText} has been added to your vocabulary.`
+        )
+        
+        // Close popover immediately for better UX and performance
+        requestAnimationFrame(() => {
+          setPopoverOpen(false)
+          setSelectedText("")
+          setTranslation("")
+          setAlternativeTranslations([])
+          setSelectedContext("")
+          setSavedWordId(null)
+          setPopoverPosition(undefined)
+          
+          // Clear selection to prevent re-triggering
+          window.getSelection()?.removeAllRanges()
+        })
+      } else {
+        // Get actual error message from API
+        let errorData: any = {}
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` }
+        }
+        
+        // Log error data in multiple ways for debugging
+        console.error("=== SAVE ERROR RESPONSE ===")
+        console.error("Status:", response.status)
+        console.error("Status Text:", response.statusText)
+        console.error("Error Data Object:", errorData)
+        console.error("Error Data JSON:", JSON.stringify(errorData, null, 2))
+        
+        // Log each property separately for easier debugging
+        if (errorData) {
+          console.error("--- Error Properties ---")
+          console.error("error:", errorData.error)
+          console.error("message:", errorData.message)
+          console.error("code:", errorData.code)
+          console.error("constraint:", errorData.constraint)
+          console.error("detail:", errorData.detail)
+          console.error("details:", errorData.details)
+          console.error("stack:", errorData.stack)
+        }
+        
+        // Build user-friendly error message
+        let errorMessage = errorData.error || errorData.message || `Failed to save word (${response.status})`
+        
+        // Add details if available
+        if (errorData.details) {
+          errorMessage += `: ${errorData.details}`
+        } else if (errorData.message && errorData.message !== errorMessage) {
+          errorMessage += `: ${errorData.message}`
+        }
+        
+        // Add constraint info if available
+        if (errorData.constraint) {
+          errorMessage += ` (constraint: ${errorData.constraint})`
+        }
+        
+        // Add code if available
+        if (errorData.code) {
+          errorMessage += ` (code: ${errorData.code})`
+        }
+        
+        console.error("Final error message:", errorMessage)
+        throw new Error(errorMessage)
+      }
+    } catch (error) {
+      console.error("Error saving word:", error)
+      let errorMessage = "An error occurred while saving. Please try again."
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+        // If it's a detailed error from API, show the details
+        if (error.message.includes(":")) {
+          errorMessage = error.message
+        }
+      }
+      
+      toast.error("Failed to save", errorMessage)
+      // Don't reset saving state immediately - let user see the error
+      setTimeout(() => setSaving(false), 2000)
+      return
+    } finally {
+      setSaving(false)
+    }
+  }, [selectedText, translation, book, selectedContext, currentLocation, currentPage])
 
   // Keyboard shortcuts handler
   useEffect(() => {
@@ -359,7 +853,7 @@ export default function ReaderPage() {
         return
       }
 
-      // Esc: Close popover or shortcuts dialog
+      // Esc: Close overlays (popover, shortcuts, drawers)
       if (e.key === "Escape") {
         if (shortcutsOpen) {
           e.preventDefault()
@@ -374,6 +868,11 @@ export default function ReaderPage() {
           setTranslation("")
           setAlternativeTranslations([])
           setSavedWordId(null)
+          return
+        }
+        if (bookmarksOpen) {
+          e.preventDefault()
+          setBookmarksOpen(false)
           return
         }
         if (tocOpen) {
@@ -421,6 +920,63 @@ export default function ReaderPage() {
           return
         }
 
+        // B: Bookmark current location
+        if (e.key === "b" || e.key === "B") {
+          e.preventDefault()
+          if (book) {
+            const bookmarkData: any = { bookId: book.id }
+            if (book.type === "epub" && currentLocation) {
+              bookmarkData.epubLocation = typeof currentLocation === "string" ? currentLocation : String(currentLocation)
+              if (currentPage !== null && currentPage > 0) {
+                bookmarkData.pageNumber = currentPage
+              }
+            } else if (book.type === "text" && currentPage !== null && currentPage > 0) {
+              bookmarkData.pageNumber = currentPage
+            } else if (book.content && currentPage !== null && currentPage > 0) {
+              bookmarkData.pageNumber = currentPage
+            }
+            
+            // Ensure we have at least one location identifier
+            if (!bookmarkData.epubLocation && !bookmarkData.pageNumber && !bookmarkData.position) {
+              toast.error("Cannot create bookmark", "No valid location found.")
+              return
+            }
+            
+            // Clean up: remove any undefined values before sending
+            const cleanBookmarkData = Object.fromEntries(
+              Object.entries(bookmarkData).filter(([_, v]) => v !== undefined)
+            )
+            
+            fetch("/api/bookmarks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(cleanBookmarkData),
+            })
+              .then(res => {
+                if (res.ok) {
+                  return res.json()
+                }
+                throw new Error("Failed to create bookmark")
+              })
+              .then(newBookmark => {
+                setBookmarks([...bookmarks, newBookmark])
+                toast.success("Bookmark added!", "You can return to this location anytime.")
+                fetch(`/api/bookmarks?bookId=${book.id}`)
+                  .then(res => res.json())
+                  .then(data => {
+                    if (Array.isArray(data)) {
+                      setBookmarks(data)
+                    }
+                  })
+                  .catch(() => {})
+              })
+              .catch(() => {
+                toast.error("Failed to add bookmark", "Please try again.")
+              })
+          }
+          return
+        }
+
         // C: Open Contents (TOC)
         if (e.key === "c" || e.key === "C") {
           if (book?.type === "epub") {
@@ -437,6 +993,28 @@ export default function ReaderPage() {
           return
         }
 
+        // Arrow keys for navigation (EPUB)
+        if (book?.type === "epub" && renditionRef.current) {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault()
+            try {
+              renditionRef.current.prev()
+            } catch (err) {
+              console.debug("Error navigating previous:", err)
+            }
+            return
+          }
+          if (e.key === "ArrowRight") {
+            e.preventDefault()
+            try {
+              renditionRef.current.next()
+            } catch (err) {
+              console.debug("Error navigating next:", err)
+            }
+            return
+          }
+        }
+
         // ?: Open shortcuts help
         if (e.key === "?") {
           e.preventDefault()
@@ -448,7 +1026,7 @@ export default function ReaderPage() {
 
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [popoverOpen, selectedText, translation, saving, savedWordId, distractionFree, book?.type, tocOpen, settingsOpen, shortcutsOpen, router])
+  }, [popoverOpen, selectedText, translation, saving, savedWordId, distractionFree, book?.type, tocOpen, settingsOpen, shortcutsOpen, bookmarksOpen, router, handleSaveWord])
 
   // Keyboard focus management
   useEffect(() => {
@@ -478,6 +1056,84 @@ export default function ReaderPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId])
+
+  // Load book settings when book changes
+  useEffect(() => {
+    if (book?.id) {
+      const settings = loadBookSettings(book.id)
+      setFontSize(settings.fontSize)
+      setFontFamily(settings.fontFamily)
+      setLineHeight(settings.lineHeight)
+      setReadingWidth(settings.readingWidth)
+      setParagraphSpacing(settings.paragraphSpacing)
+      setTheme(settings.theme)
+      setDistractionFree(settings.distractionFree)
+    }
+  }, [book?.id])
+
+  // Save book settings when they change (excluding theme - it's synced to global)
+  useEffect(() => {
+    if (book?.id) {
+      saveBookSettings(book.id, {
+        fontSize,
+        fontFamily,
+        lineHeight,
+        readingWidth,
+        paragraphSpacing,
+        theme, // Still save current theme for reading surface
+        distractionFree,
+      })
+    }
+  }, [book?.id, fontSize, fontFamily, lineHeight, readingWidth, paragraphSpacing, theme, distractionFree])
+
+  // Measure container dimensions for layout fingerprint
+  useEffect(() => {
+    const container = epubContainerRef.current || scrollContainerRef.current
+    if (!container) return
+
+    const updateSize = () => {
+      setContainerSize({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      })
+    }
+
+    updateSize()
+    const resizeObserver = new ResizeObserver(updateSize)
+    resizeObserver.observe(container)
+
+    // Also listen to window resize
+    window.addEventListener('resize', updateSize)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateSize)
+    }
+  }, [book?.type])
+
+  // Regenerate locations when layout fingerprint changes
+  useEffect(() => {
+    if (book?.type !== "epub" || !bookRef.current) return
+    
+    const fingerprint: LayoutFingerprint = {
+      fontSize,
+      fontFamily,
+      lineHeight,
+      readingWidth,
+      containerWidth: containerSize.width || window.innerWidth,
+      containerHeight: containerSize.height || window.innerHeight,
+    }
+
+    // Debounce regeneration (600ms)
+    const timer = setTimeout(() => {
+      if (bookRef.current) {
+        locationsReadyRef.current = false
+        ensureEpubLocations(bookRef.current, fingerprint)
+      }
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [fontSize, fontFamily, lineHeight, readingWidth, containerSize, book?.type, ensureEpubLocations])
 
   // Fetch bookmarks for this book
   useEffect(() => {
@@ -753,6 +1409,51 @@ export default function ReaderPage() {
       
       setBook(foundBook)
       
+      // Load last read position
+      try {
+        const bookmarksRes = await fetch(`/api/bookmarks?bookId=${bookId}`)
+        if (bookmarksRes.ok) {
+          const bookmarks: any[] = await bookmarksRes.json()
+          const lastReadBookmark = bookmarks.find(b => b.title === "__LAST_READ__")
+          if (lastReadBookmark) {
+            // Restore location based on book type
+            if (foundBook.type === "epub" && lastReadBookmark.epubLocation) {
+              setLocation(lastReadBookmark.epubLocation)
+              setCurrentLocation(lastReadBookmark.epubLocation)
+            } else if (foundBook.type === "pdf" && lastReadBookmark.pageNumber) {
+              setCurrentPage(lastReadBookmark.pageNumber)
+            } else if (foundBook.type === "text") {
+              if (lastReadBookmark.position) {
+                setLocation(lastReadBookmark.position)
+              }
+              // Restore page number if available
+              if (lastReadBookmark.pageNumber) {
+                setCurrentPage(lastReadBookmark.pageNumber)
+                // Scroll to that page after a short delay to ensure content is rendered
+                setTimeout(() => {
+                  const container = scrollContainerRef.current
+                  if (container && bookContentRef.current) {
+                    const containerHeight = container.clientHeight
+                    const scrollPosition = (lastReadBookmark.pageNumber - 1) * containerHeight
+                    container.scrollTo({
+                      top: scrollPosition,
+                      behavior: 'auto'
+                    })
+                  }
+                }, 500)
+              }
+            }
+            // Restore progress if available
+            if (lastReadBookmark.progressPercentage) {
+              setReadingProgress(lastReadBookmark.progressPercentage)
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading last read position:", error)
+        // Continue without restoring position
+      }
+      
       // Prepare EPUB URL if it's an EPUB book
       // Use API endpoint so epubjs can fetch individual files
       if (foundBook.type === "epub") {
@@ -896,192 +1597,6 @@ export default function ReaderPage() {
     }
   }
 
-  const handleSaveWord = async () => {
-    console.log("handleSaveWord called", { selectedText, translation, book: book?.id })
-    
-    if (!selectedText || !translation || !book) {
-      console.error("Missing required fields:", { selectedText: !!selectedText, translation: !!translation, book: !!book })
-      toast.error("Missing information", "Please select a word and wait for translation.")
-      return
-    }
-
-    setSaving(true)
-    try {
-      console.log("Starting save process...")
-      // Ensure we always have a context - use selectedText as fallback
-      let context = selectedContext?.trim() || selectedText.trim()
-      
-      // For non-EPUB, try to get better context if we don't have it
-      if (book.type !== "epub" && (!selectedContext || selectedContext === selectedText)) {
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          const container = range.commonAncestorContainer
-          if (container.parentElement) {
-            const parentText = container.parentElement.textContent || ""
-            const startOffset = Math.max(0, range.startOffset - 100)
-            const endOffset = Math.min(parentText.length, range.endOffset + 100)
-            const extractedContext = parentText.substring(startOffset, endOffset).trim()
-            if (extractedContext && extractedContext.length > selectedText.length) {
-              context = extractedContext
-            }
-          }
-        }
-      }
-
-      // Ensure context is not empty - fallback to selectedText
-      if (!context || context.trim().length === 0) {
-        context = selectedText.trim()
-      }
-
-      // For EPUB, store location and page; for others, calculate position
-      let position: number | null = null
-      let epubLocation: string | null = null
-      let pageNumber: number | null = null
-      
-      if (book.type === "epub") {
-        // Store EPUB location (CFI format)
-        epubLocation = typeof currentLocation === "string" ? currentLocation : String(currentLocation)
-        // Use current page if available
-        pageNumber = currentPage
-      } else {
-        // For text content, calculate character position
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          const container = range.commonAncestorContainer
-          if (container.parentElement) {
-            position = range.startOffset
-          }
-        }
-      }
-
-      const payload = {
-        term: selectedText.trim(),
-        translation: translation.trim(),
-        context: context.trim(),
-        bookId: book.id,
-        position,
-        epubLocation,
-        pageNumber,
-      }
-      
-      console.log("Sending save request:", payload)
-      
-      const response = await fetch("/api/vocabulary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      
-      console.log("Response status:", response.status, response.statusText)
-
-      if (response.ok) {
-        const data = await response.json()
-        setSavedWordId(data.id)
-        
-        // Add word to vocabulary words set so it gets highlighted immediately
-        const normalized = selectedText.trim().toLowerCase().replace(/[^\w]/g, "")
-        if (normalized.length > 0) {
-          setVocabularyWords(prev => {
-            const newSet = new Set(prev)
-            newSet.add(normalized)
-            return newSet
-          })
-        }
-        
-        // Show toast notification
-        const isPhrase = selectedText.split(/\s+/).length > 1
-        toast.success(
-          isPhrase ? "Phrase saved!" : "Word saved!",
-          `${selectedText} has been added to your vocabulary.`
-        )
-        
-        // Close popover immediately for better UX and performance
-        requestAnimationFrame(() => {
-          setPopoverOpen(false)
-          setSelectedText("")
-          setTranslation("")
-          setAlternativeTranslations([])
-          setSelectedContext("")
-          setSavedWordId(null)
-          setPopoverPosition(undefined)
-          
-          // Clear selection to prevent re-triggering
-          window.getSelection()?.removeAllRanges()
-        })
-      } else {
-        // Get actual error message from API
-        let errorData: any = {}
-        try {
-          errorData = await response.json()
-        } catch (e) {
-          errorData = { error: `HTTP ${response.status}: ${response.statusText}` }
-        }
-        
-        // Log error data in multiple ways for debugging
-        console.error("=== SAVE ERROR RESPONSE ===")
-        console.error("Status:", response.status)
-        console.error("Status Text:", response.statusText)
-        console.error("Error Data Object:", errorData)
-        console.error("Error Data JSON:", JSON.stringify(errorData, null, 2))
-        
-        // Log each property separately for easier debugging
-        if (errorData) {
-          console.error("--- Error Properties ---")
-          console.error("error:", errorData.error)
-          console.error("message:", errorData.message)
-          console.error("code:", errorData.code)
-          console.error("constraint:", errorData.constraint)
-          console.error("detail:", errorData.detail)
-          console.error("details:", errorData.details)
-          console.error("stack:", errorData.stack)
-        }
-        
-        // Build user-friendly error message
-        let errorMessage = errorData.error || errorData.message || `Failed to save word (${response.status})`
-        
-        // Add details if available
-        if (errorData.details) {
-          errorMessage += `: ${errorData.details}`
-        } else if (errorData.message && errorData.message !== errorMessage) {
-          errorMessage += `: ${errorData.message}`
-        }
-        
-        // Add constraint info if available
-        if (errorData.constraint) {
-          errorMessage += ` (constraint: ${errorData.constraint})`
-        }
-        
-        // Add code if available
-        if (errorData.code) {
-          errorMessage += ` (code: ${errorData.code})`
-        }
-        
-        console.error("Final error message:", errorMessage)
-        throw new Error(errorMessage)
-      }
-    } catch (error) {
-      console.error("Error saving word:", error)
-      let errorMessage = "An error occurred while saving. Please try again."
-      
-      if (error instanceof Error) {
-        errorMessage = error.message
-        // If it's a detailed error from API, show the details
-        if (error.message.includes(":")) {
-          errorMessage = error.message
-        }
-      }
-      
-      toast.error("Failed to save", errorMessage)
-      // Don't reset saving state immediately - let user see the error
-      setTimeout(() => setSaving(false), 2000)
-      return
-    } finally {
-      setSaving(false)
-    }
-  }
-
   const handlePopoverMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
     if (target.closest('[data-drag-handle]') || target.closest('[data-drag-handle]')?.contains(target)) {
@@ -1140,6 +1655,68 @@ export default function ReaderPage() {
     }
   }, [isDragging, dragOffset, popoverOpen])
 
+  // Helper function to add bookmark
+  const handleAddBookmark = useCallback(async () => {
+    if (!book) return
+    try {
+      const bookmarkData: any = { bookId: book.id }
+      if (book.type === "epub" && currentLocation) {
+        bookmarkData.epubLocation = typeof currentLocation === "string" ? currentLocation : String(currentLocation)
+        if (currentPage !== null && currentPage > 0) {
+          bookmarkData.pageNumber = currentPage
+        }
+      } else if (book.type === "text" && currentPage !== null && currentPage > 0) {
+        bookmarkData.pageNumber = currentPage
+      } else if (book.content && currentPage !== null && currentPage > 0) {
+        bookmarkData.pageNumber = currentPage
+      }
+      
+      // Ensure we have at least one location identifier
+      if (!bookmarkData.epubLocation && !bookmarkData.pageNumber && !bookmarkData.position) {
+        toast.error("Cannot create bookmark", "No valid location found.")
+        return
+      }
+      
+      // Clean up: remove any undefined values before sending
+      const cleanBookmarkData = Object.fromEntries(
+        Object.entries(bookmarkData).filter(([_, v]) => v !== undefined)
+      )
+      
+      const res = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cleanBookmarkData),
+      })
+      
+      if (res.ok) {
+        const newBookmark = await res.json()
+        setBookmarks((prev) => [...prev, newBookmark])
+        toast.success("Bookmark added!", "You can return to this location anytime.")
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        const errorMsg = errorData.message || errorData.error || "Please try again."
+        console.error("Bookmark error:", errorData)
+        toast.error("Failed to add bookmark", errorMsg)
+      }
+    } catch (error) {
+      console.error("Error creating bookmark:", error)
+      toast.error("Failed to add bookmark", "An error occurred. Please try again.")
+    }
+  }, [book, currentLocation, currentPage])
+
+  // Theme background colors - unified across entire page
+  // Reading width - increased significantly for better readability
+  // Use percentage-based max-width for better responsiveness
+  const readingWidthStyle = readingWidth === "comfort" 
+    ? { maxWidth: "85ch", width: "100%" }
+    : { maxWidth: "100ch", width: "100%" }
+
+  // Get theme colors - unified across entire page
+  const themeBgColor = theme === "dark" ? "#1a1a1a" : theme === "sepia" ? "#f4ecd8" : theme === "paper" ? "#faf8f3" : "white"
+  const themeTextColor = theme === "dark" ? "#e0e0e0" : "#292B30"
+
+  // Early returns
+
   // Early returns
   if (loading) {
     return (
@@ -1151,183 +1728,90 @@ export default function ReaderPage() {
   }
 
   if (!book) {
-    return <div className="text-center py-12">Book not found</div>
+    return (
+      <div className="text-center py-12">Book not found</div>
+    )
   }
-
-  // Theme background colors - apply to both container and content
-  const themeStyles = {
-    light: "bg-white",
-    sepia: "bg-[#f4ecd8]",
-    dark: "bg-[#1a1a1a] text-[#e0e0e0]",
-    paper: "bg-[#faf8f3]",
-  }
-
-  const themeClass = themeStyles[theme]
-  const textColorClass = theme === "dark" ? "text-[#e0e0e0]" : "text-foreground"
 
   return (
-    <div className={`theme-surface min-h-screen ${distractionFree ? themeClass : "bg-background"}`}>
+    <div 
+      className="reader-root theme-surface min-h-screen"
+      data-reader-theme={theme}
+      style={{
+        backgroundColor: themeBgColor,
+        color: themeTextColor,
+        transition: "background-color 0.2s ease, color 0.2s ease",
+      }}
+    >
+      {/* Sync reader theme to global theme */}
+      <ReaderThemeSync />
+      
+      {/* Minimal top bar with auto-hide */}
       {!distractionFree && (
-        <div className={`theme-surface mb-6 container mx-auto px-4 transition-[margin-bottom] duration-200 ease-out ${headerMinimized ? 'mb-2' : ''}`}>
-          {/* Collapsible Header */}
-          <div className={`flex items-center justify-between gap-2 transition-[margin-bottom,opacity] duration-200 ease-out ${
-            headerMinimized ? 'mb-0' : 'mb-4'
-          }`}>
-            {/* Title - hidden when minimized */}
-            <h1 className={`text-2xl font-bold flex-1 truncate transition-[opacity,max-width] duration-200 ease-out ${
-              headerMinimized ? 'opacity-0 max-w-0 overflow-hidden' : 'opacity-100 max-w-full'
-            }`}>
-              {book.title}
-            </h1>
-            
-            {/* Grouped Action Buttons */}
-            <div className="theme-surface flex items-center gap-2 bg-background border border-border rounded-lg p-1.5 shadow-sm">
-              {/* Minimize/Expand Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setHeaderMinimized(!headerMinimized)}
-                className="h-8 w-8 p-0"
-                aria-label={headerMinimized ? "Expand header" : "Minimize header"}
-                title={headerMinimized ? "Show title and settings" : "Hide title"}
-              >
-                {headerMinimized ? (
-                  <ChevronDown className="h-4 w-4 rotate-180" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </Button>
-              
-              {/* Settings Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSettingsOpen(true)}
-                className="h-8 w-8 p-0"
-                aria-label="Settings"
-                title="Reader settings"
-              >
-                <Settings2 className="h-4 w-4" />
-              </Button>
-              
-              {/* Table of Contents (EPUB only) */}
-              {book.type === "epub" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setTocOpen(true)}
-                  className="h-8 w-8 p-0"
-                  aria-label="Table of contents"
-                  title="Table of contents"
-                >
-                  <Menu className="h-4 w-4" />
-                </Button>
-              )}
-              
-              {/* Bookmarks List Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setBookmarksOpen(true)}
-                className="h-8 w-8 p-0 relative"
-                aria-label="Bookmarks"
-                title="View bookmarks"
-              >
-                <Bookmark className="h-4 w-4" />
-                {bookmarks.length > 0 && (
-                  <span className="absolute -top-1 -right-1 text-[10px] bg-primary text-primary-foreground rounded-full px-1 min-w-[16px] h-4 flex items-center justify-center">
-                    {bookmarks.length}
-                  </span>
-                )}
-              </Button>
-              
-              {/* Add Bookmark Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    const bookmarkData: any = { bookId: book.id }
-                    if (book.type === "epub" && currentLocation) {
-                      bookmarkData.epubLocation = typeof currentLocation === "string" ? currentLocation : String(currentLocation)
-                      bookmarkData.pageNumber = currentPage
-                    } else if (book.content) {
-                      bookmarkData.pageNumber = currentPage
-                    }
-                    
-                    const res = await fetch("/api/bookmarks", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(bookmarkData),
-                    })
-                    
-                    if (res.ok) {
-                      const newBookmark = await res.json()
-                      setBookmarks([...bookmarks, newBookmark])
-                      toast.success("Bookmark added!", "You can return to this location anytime.")
-                    } else {
-                      const errorData = await res.json().catch(() => ({}))
-                      const errorMsg = errorData.message || errorData.error || "Please try again."
-                      console.error("Bookmark error:", errorData)
-                      toast.error("Failed to add bookmark", errorMsg)
-                    }
-                  } catch (error) {
-                    console.error("Error creating bookmark:", error)
-                    toast.error("Failed to add bookmark", "An error occurred. Please try again.")
-                  }
-                }}
-                className="h-8 w-8 p-0"
-                aria-label="Add bookmark"
-                title="Bookmark current location"
-              >
-                <BookmarkCheck className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          
-          {/* Settings Panel - shown when not minimized */}
-          {!headerMinimized && (
-            <div>
-              <ReaderSettings
-                fontSize={fontSize}
-                fontFamily={fontFamily}
-                lineHeight={lineHeight}
-                maxWidth={maxWidth}
-                paragraphSpacing={paragraphSpacing}
-                theme={theme}
-                distractionFree={distractionFree}
-                isOpen={settingsOpen}
-                onOpenChange={setSettingsOpen}
-                onFontSizeChange={setFontSize}
-                onFontFamilyChange={setFontFamily}
-                onLineHeightChange={setLineHeight}
-                onMaxWidthChange={setMaxWidth}
-                onParagraphSpacingChange={setParagraphSpacing}
-                onThemeChange={setTheme}
-                onDistractionFreeChange={setDistractionFree}
-              />
-            </div>
-          )}
-        </div>
+        <ReaderTopBar
+          bookTitle={book.title}
+          bookType={book.type as "epub" | "pdf" | "text"}
+          distractionFree={distractionFree}
+          bookmarksCount={bookmarks.filter(b => b.title !== "__LAST_READ__").length}
+          currentChapter={currentChapter}
+          readingProgress={readingProgress}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onSettingsClick={() => setSettingsOpen(true)}
+          onTocClick={book.type === "epub" ? () => setTocOpen(true) : undefined}
+          onBookmarksClick={() => setBookmarksOpen(true)}
+          onAddBookmark={handleAddBookmark}
+          onDistractionFreeChange={setDistractionFree}
+        />
       )}
 
+      {/* Settings Drawer */}
+      <ReaderSettings
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        lineHeight={lineHeight}
+        readingWidth={readingWidth}
+        theme={theme}
+        onThemeChange={setTheme}
+        paragraphSpacing={paragraphSpacing}
+        onParagraphSpacingChange={setParagraphSpacing}
+        isOpen={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onFontSizeChange={setFontSize}
+        onFontFamilyChange={setFontFamily}
+        onLineHeightChange={setLineHeight}
+        onReadingWidthChange={setReadingWidth}
+      />
+
+      {/* Distraction-free mode exit button - minimal */}
       {distractionFree && (
         <div className="fixed top-4 right-4 z-50">
           <Button
-            variant="outline"
-            size="lg"
+            variant="ghost"
+            size="sm"
             onClick={() => setDistractionFree(false)}
-            className="theme-surface h-12 w-12 min-w-[48px] shadow-lg bg-background"
-            aria-label="Show settings"
+            className="h-8 w-8 p-0 opacity-60 hover:opacity-100 transition-opacity"
+            aria-label="Exit focus mode"
+            title="Exit focus mode"
           >
-            <Settings2 className="h-5 w-5" />
+            <Settings2 className="h-4 w-4" />
           </Button>
         </div>
       )}
 
-      <div className={`theme-surface ${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12"}`}>
+      {/* Two-layer background: App chrome + Reading surface - unified theme, no borders */}
+      <div 
+        className={`theme-surface ${distractionFree ? "" : "container mx-auto px-4 md:px-8 lg:px-12 py-8"}`}
+        style={{
+          backgroundColor: themeBgColor,
+          color: themeTextColor,
+          transition: "background-color 0.2s ease, color 0.2s ease",
+        }}
+      >
+        {/* Centered reading surface - unified theme, no white borders */}
         <div
-          className={`theme-surface ${distractionFree ? "min-h-screen" : "border rounded-lg min-h-[800px] max-h-[90vh]"} ${themeClass} ${textColorClass} overflow-auto ${distractionFree ? "" : "shadow-sm"}`}
+          ref={scrollContainerRef}
+          className={`theme-surface ${distractionFree ? "min-h-screen" : "min-h-[800px]"} overflow-auto`}
           onMouseUp={() => {
             // Only handle mouseup for non-EPUB content
             // EPUB content handles selection via iframe events
@@ -1339,13 +1823,21 @@ export default function ReaderPage() {
             "--RS__fontFamily": book.type === "epub" ? fontFamily : undefined,
             "--RS__fontSize": book.type === "epub" ? `${fontSize}px` : undefined,
             "--RS__lineHeight": book.type === "epub" ? lineHeight.toString() : undefined,
-            backgroundColor: theme === "dark" ? "#1a1a1a" : theme === "sepia" ? "#f4ecd8" : theme === "paper" ? "#faf8f3" : "white",
-            color: theme === "dark" ? "#e0e0e0" : "inherit",
+            ...readingWidthStyle,
+            marginLeft: "auto",
+            marginRight: "auto",
+            paddingLeft: distractionFree ? "1rem" : "clamp(2rem, 5vw, 4rem)",
+            paddingRight: distractionFree ? "1rem" : "clamp(2rem, 5vw, 4rem)",
+            paddingTop: distractionFree ? "2rem" : "3rem",
+            paddingBottom: distractionFree ? "2rem" : "3rem",
+            backgroundColor: themeBgColor,
+            color: themeTextColor,
             transition: "background-color 0.2s ease, color 0.2s ease",
           } as React.CSSProperties}
         >
         {book.type === "epub" ? (
-          epubError ? (
+          <ReaderErrorBoundary>
+            {epubError ? (
             <div className="text-center text-muted-foreground p-12">
               <p className="text-red-500 mb-2 font-semibold">Error loading book</p>
               <p className="text-sm mb-4">{epubError}</p>
@@ -1355,210 +1847,173 @@ export default function ReaderPage() {
                   fetchBook()
                 }}
                 variant="outline"
+                  className="min-h-[48px]"
               >
                 Retry
               </Button>
             </div>
           ) : epubUrl ? (
-            <div style={{ height: "700px", position: "relative" }}>
-              {/* Progress Bar */}
-              {readingProgress > 0 && (
-                <div className="mb-2 px-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                    <span>{currentChapter || "Reading..."}</span>
-                    <span>{Math.round(readingProgress)}%</span>
-                  </div>
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-[width] duration-300"
-                      style={{ width: `${readingProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              
-              <EpubReader
+            <div 
+              className="reader-paper-surface"
+              style={{
+                backgroundColor: "var(--reader-paper)",
+                maxWidth: readingWidth === "comfort" ? "85ch" : "100ch",
+                margin: "0 auto",
+              }}
+            >
+              <div 
+                ref={epubContainerRef}
+                style={{ 
+                  height: "calc(100vh - 8rem)", 
+                  minHeight: "800px", 
+                  position: "relative", 
+                  width: "100%",
+                  backgroundColor: "var(--reader-paper)",
+                }}
+              >
+                <EpubReader
+                key={bookId} // Only remount when book changes, not settings
                 url={epubUrl}
                 location={location}
+                theme={theme}
                 knownWords={knownWords}
                 vocabularyWords={vocabularyWords}
                 hasKnownWordsData={hasKnownWordsData}
                 onLocationChange={(loc) => {
-                  // Only update if location actually changed to prevent infinite loops
-                  if (loc !== location) {
-                    setLocation(loc)
-                    setCurrentLocation(loc)
-                  }
+                  // Store last location for replay when locations are ready
+                  lastLocRef.current = loc
+                  
+                  // Always update location state
+                  setLocation(loc)
+                  setCurrentLocation(loc)
                   
                   // Calculate progress and chapter
-                  if (bookRef.current && renditionRef.current) {
+                  const bookObj = bookRef.current
+                  if (!bookObj) return
+
+                  // If locations aren't ready yet, try to ensure they are
+                  if (!locationsReadyRef.current) {
+                    const fingerprint: LayoutFingerprint = {
+                      fontSize,
+                      fontFamily,
+                      lineHeight,
+                      readingWidth,
+                      containerWidth: containerSize.width || window.innerWidth,
+                      containerHeight: containerSize.height || window.innerHeight,
+                    }
+                    ensureEpubLocations(bookObj, fingerprint).then(() => {
+                      // Retry page update after locations are ready
+                      if (lastLocRef.current) {
+                        updateEpubPagesFromLoc(lastLocRef.current, bookObj)
+                      }
+                    })
+                    setCurrentPage(1)
+                    return
+                  }
+
+                  // Update pages from location - always call this to ensure updates
+                  // Use requestAnimationFrame to ensure DOM is ready
+                  requestAnimationFrame(() => {
                     try {
-                      // Check if locations exist and are usable
-                      const locations = bookRef.current.locations
-                      let percentage = 0
-                      
-                      // Only calculate if locations exist and have been generated
-                      if (locations && typeof loc === 'string') {
+                      updateEpubPagesFromLoc(loc, bookObj)
+                    } catch (e) {
+                      console.debug("Error updating pages from location:", e)
+                      // Retry once after a short delay
+                      setTimeout(() => {
                         try {
-                          // Check if locations have been generated (length > 0 or total exists)
-                          const hasLocations = locations.length && locations.length() > 0
-                          const hasTotal = locations.total !== null && locations.total !== undefined
-                          
-                          if (hasLocations || hasTotal) {
-                            const cfi = loc
-                            percentage = locations.percentageFromCfi(cfi) || 0
-                            if (locations.total !== null && locations.total > 0) {
-                              const page = Math.ceil((percentage / 100) * locations.total)
-                              setCurrentPage(page)
-                            }
-                          }
-                        } catch (e) {
-                          // Locations might not be fully ready yet - this is normal during initial load
-                          console.debug("Locations not ready yet:", e)
+                          updateEpubPagesFromLoc(loc, bookObj)
+                        } catch (retryError) {
+                          console.debug("Retry failed:", retryError)
                         }
-                      } else if (typeof loc === 'number') {
-                        percentage = loc
-                        // Only access total if locations exist and have total
-                        if (locations && locations.total !== null && locations.total !== undefined && locations.total > 0) {
-                          const total = locations.total
-                          const page = Math.ceil((loc / 100) * total)
-                          setCurrentPage(page)
-                        }
+                      }, 100)
+                    }
+                  })
+                  
+                  // Calculate percentage for auto-save
+                  let percentage = 0
+                  try {
+                    const locations = bookObj.locations
+                    if (locations) {
+                      if (typeof loc === 'string') {
+                        const p = locations.percentageFromCfi(loc)
+                        percentage = normalizeToFraction(Number(p) || 0) * 100
+                      } else {
+                        percentage = normalizeToFraction(loc) * 100
                       }
-                      
-                      // Only set progress if we got a valid percentage
-                      if (percentage > 0) {
-                        setReadingProgress(percentage)
-                        
-                        // Auto-save progress (debounced - every 3 seconds)
-                        if (autoSaveTimerRef.current) {
-                          clearTimeout(autoSaveTimerRef.current)
-                        }
-                        
-                        autoSaveTimerRef.current = setTimeout(() => {
-                          if (book && percentage > 0) {
-                            autoSaveProgress(loc, percentage)
-                          }
-                        }, 3000) // Save every 3 seconds after user stops reading
+                    }
+                  } catch (e) {
+                    console.debug("Error calculating percentage:", e)
+                  }
+                  
+                  // Auto-save progress (debounced - every 3 seconds)
+                  if (percentage > 0) {
+                    if (autoSaveTimerRef.current) {
+                      clearTimeout(autoSaveTimerRef.current)
+                    }
+                    
+                    autoSaveTimerRef.current = setTimeout(() => {
+                      if (book && percentage > 0) {
+                        autoSaveProgress(loc, percentage)
                       }
-                      
-                      // Find current chapter from TOC
-                      if (toc.length > 0 && typeof loc === 'string') {
-                        // Try to find which chapter we're in based on location
-                        const currentLoc = renditionRef.current?.currentLocation()
-                        if (currentLoc?.start?.cfi) {
-                          // Find the chapter that contains this location
-                          for (let i = toc.length - 1; i >= 0; i--) {
-                            const tocItem = toc[i]
-                            if (tocItem.href) {
-                              try {
-                                // Check if current location is after this TOC item
-                                const tocCfi = bookRef.current?.spine?.get(tocItem.href)?.cfi
-                                if (tocCfi && currentLoc.start.cfi >= tocCfi) {
-                                  setCurrentChapter(tocItem.label)
-                                  break
-                                }
-                              } catch (e) {
-                                // Ignore errors in chapter detection
+                    }, 3000) // Save every 3 seconds after user stops reading
+                  }
+                  
+                  // Find current chapter from TOC
+                  if (toc.length > 0 && typeof loc === 'string' && renditionRef.current) {
+                    try {
+                      const currentLoc = renditionRef.current.currentLocation()
+                      if (currentLoc?.start?.cfi) {
+                        // Find the chapter that contains this location
+                        for (let i = toc.length - 1; i >= 0; i--) {
+                          const tocItem = toc[i]
+                          if (tocItem.href) {
+                            try {
+                              const tocCfi = bookObj?.spine?.get(tocItem.href)?.cfi
+                              if (tocCfi && currentLoc.start.cfi >= tocCfi) {
+                                setCurrentChapter(tocItem.label)
+                                break
                               }
+                            } catch (e) {
+                              // Ignore errors in chapter detection
                             }
                           }
                         }
                       }
                     } catch (e) {
-                      // If page calculation fails, try to get from rendition
-                      // Only if locations are ready
-                      try {
-                        if (!bookRef.current?.locations) {
-                          return // Locations not available yet
-                        }
-                        
-                        // Check if locations have been generated
-                        const locations = bookRef.current.locations
-                        const hasLocations = locations.length && typeof locations.length === 'function' && locations.length() > 0
-                        const hasTotal = locations.total !== null && locations.total !== undefined
-                        
-                        if (!hasLocations && !hasTotal) {
-                          return // Locations not generated yet
-                        }
-                        
-                        const currentLoc = renditionRef.current?.currentLocation()
-                        if (currentLoc && currentLoc.start && locations) {
-                          const percentage = locations.percentageFromCfi(currentLoc.start.cfi) || 0
-                          if (percentage > 0) {
-                            setReadingProgress(percentage)
-                            if (locations.total && locations.total > 0) {
-                              const page = Math.ceil((percentage / 100) * locations.total)
-                              setCurrentPage(page)
-                            }
-                          }
-                        }
-                      } catch (err) {
-                        // Silently ignore - locations might not be ready yet
-                        console.debug("Error calculating progress (locations not ready):", err)
-                      }
+                      console.debug("Error finding chapter:", e)
                     }
                   }
                 }}
                 onRenditionReady={async (rend, book) => {
                   renditionRef.current = rend
-                  if (book) {
-                    bookRef.current = book
-                  } else if (rend.book) {
-                    bookRef.current = rend.book
+                  const bookObj = book || rend.book
+                  if (bookObj) {
+                    bookRef.current = bookObj
                   }
                   
-                  // Generate locations if not already generated
-                  // Wait a bit for the book to be fully opened
-                  setTimeout(async () => {
-                    try {
-                      const bookObj = book || rend.book
-                      if (!bookObj || !bookObj.locations) {
-                        return
-                      }
-                      
-                      // Check if book is opened and has spine
-                      if (!bookObj.spine || !bookObj.spine.spineItems || bookObj.spine.spineItems.length === 0) {
-                        console.debug("Book spine not ready yet")
-                        return
-                      }
-                      
-                      // Check if locations are already generated
-                      const locationsKey = `epub_locations_${bookId}`
-                      const cachedLocations = localStorage.getItem(locationsKey)
-                      
-                      // Check current length safely
-                      let currentLength = 0
-                      try {
-                        currentLength = bookObj.locations.length ? bookObj.locations.length() : 0
-                      } catch (e) {
-                        // Locations might not be initialized yet
-                        console.debug("Locations not initialized yet")
-                        return
-                      }
-                      
-                      if (!cachedLocations && currentLength === 0) {
-                        // Generate locations (1000 is a good default)
-                        console.log("Generating locations...")
-                        try {
-                          await bookObj.locations.generate(1000)
-                          // Cache the fact that locations are generated
-                          localStorage.setItem(locationsKey, "true")
-                          console.log("Locations generated:", bookObj.locations.length())
-                        } catch (genError: any) {
-                          // Handle specific epubjs errors gracefully
-                          if (genError?.message?.includes("content") || genError?.message?.includes("undefined")) {
-                            console.warn("Some sections may not be loaded yet. Locations will be generated as you read.")
-                          } else {
-                            console.error("Error generating locations:", genError)
-                          }
-                        }
-                      }
-                    } catch (e) {
-                      // Silently handle - locations generation is optional
-                      console.debug("Could not generate locations:", e)
+                  // Create layout fingerprint for initial load
+                  const fingerprint: LayoutFingerprint = {
+                    fontSize,
+                    fontFamily,
+                    lineHeight,
+                    readingWidth,
+                    containerWidth: containerSize.width || window.innerWidth,
+                    containerHeight: containerSize.height || window.innerHeight,
+                  }
+                  
+                  // Ensure locations are generated and ready
+                  await ensureEpubLocations(bookObj, fingerprint)
+                  
+                  // Force an initial page update even before navigation
+                  try {
+                    const cfi = rend?.currentLocation?.()?.start?.cfi
+                    if (cfi) {
+                      lastLocRef.current = cfi
+                      updateEpubPagesFromLoc(cfi, bookObj)
                     }
-                  }, 1000) // Wait 1 second for book to fully open
+                  } catch (e) {
+                    console.debug("Error getting initial location:", e)
+                  }
                   
                   // Navigate to initial location if provided
                   if (initialLocation && rend) {
@@ -1606,20 +2061,27 @@ export default function ReaderPage() {
                     // Wait a bit for rendition to be fully ready
                     await new Promise(resolve => setTimeout(resolve, 100))
                     
-                    const currentLoc = rend.currentLocation?.()
-                    if (currentLoc && currentLoc.start && bookObj?.locations) {
-                      const percentage = bookObj.locations.percentageFromCfi(currentLoc.start.cfi) || 0
-                      setReadingProgress(percentage)
-                      if (percentage !== null && bookObj.locations.total) {
-                        const page = Math.ceil((percentage / 100) * bookObj.locations.total)
-                        setCurrentPage(page)
-                      }
-                      
-                      // Set current location
-                      if (currentLoc.start.cfi) {
-                        setCurrentLocation(currentLoc.start.cfi)
-                      }
-                    }
+                        const currentLoc = rend.currentLocation?.()
+                        if (currentLoc && currentLoc.start && bookObj?.locations) {
+                          const percentage = bookObj.locations.percentageFromCfi(currentLoc.start.cfi) || 0
+                          // percentageFromCfi returns 0-1, convert to 0-100
+                          const progressPercent = normalizeToFraction(percentage) * 100
+                          setReadingProgress(progressPercent)
+                          if (bookObj.locations.total) {
+                            const total = Number(bookObj.locations.total)
+                            if (total > 0) {
+                              setTotalPages(total)
+                              // Calculate page number (1-indexed)
+                              const page = Math.max(1, Math.min(total, Math.ceil(progressPercent / 100 * total) || 1))
+                              setCurrentPage(page)
+                            }
+                          }
+                          
+                          // Set current location
+                          if (currentLoc.start.cfi) {
+                            setCurrentLocation(currentLoc.start.cfi)
+                          }
+                        }
                   } catch (e) {
                     console.error("Error getting initial page:", e)
                     // Don't throw - this is not critical
@@ -1633,6 +2095,7 @@ export default function ReaderPage() {
                 fontFamily={fontFamily}
                 lineHeight={lineHeight}
               />
+              </div>
               
               {/* TOC Drawer */}
               <TocDrawer
@@ -1660,49 +2123,96 @@ export default function ReaderPage() {
                   if (book.type === "epub" && bookmark.epubLocation && renditionRef.current) {
                     try {
                       renditionRef.current.display(bookmark.epubLocation)
+                      setLocation(bookmark.epubLocation)
+                      setCurrentLocation(bookmark.epubLocation)
                       setBookmarksOpen(false)
+                      toast.success("Navigated to bookmark", "You're now at your saved location.")
                     } catch (e) {
                       console.error("Error navigating to bookmark:", e)
+                      toast.error("Navigation failed", "Could not navigate to bookmark location.")
+                    }
+                  } else if (book.type === "text" && bookmark.pageNumber) {
+                    // Scroll to the page for text books
+                    const container = scrollContainerRef.current
+                    if (container && bookContentRef.current) {
+                      const containerHeight = container.clientHeight
+                      const scrollPosition = (bookmark.pageNumber - 1) * containerHeight
+                      container.scrollTo({
+                        top: scrollPosition,
+                        behavior: 'smooth'
+                      })
+                      setCurrentPage(bookmark.pageNumber)
+                      setBookmarksOpen(false)
+                      toast.success("Navigated to bookmark", "You're now at your saved location.")
+                    } else {
+                      setCurrentPage(bookmark.pageNumber)
+                      setBookmarksOpen(false)
+                      toast.success("Navigated to bookmark", "You're now at your saved location.")
                     }
                   } else if (bookmark.pageNumber) {
                     setCurrentPage(bookmark.pageNumber)
                     setBookmarksOpen(false)
+                    toast.success("Navigated to bookmark", "You're now at your saved location.")
                   }
                 }}
                 onDelete={async (id) => {
                   try {
-                    await fetch(`/api/bookmarks/${id}`, { method: "DELETE" })
+                    const res = await fetch(`/api/bookmarks/${id}`, { method: "DELETE" })
+                    if (res.ok) {
                     setBookmarks(bookmarks.filter(b => b.id !== id))
+                      toast.success("Bookmark deleted", "The bookmark has been removed.")
+                    } else {
+                      throw new Error("Failed to delete bookmark")
+                    }
                   } catch (error) {
                     console.error("Error deleting bookmark:", error)
+                    toast.error("Failed to delete", "Could not remove bookmark. Please try again.")
                   }
                 }}
+                onUpdate={async (id, title) => {
+                  const res = await fetch(`/api/bookmarks/${id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title }),
+                  })
+                  if (!res.ok) {
+                    throw new Error("Failed to update bookmark")
+                  }
+                  const updated = await res.json()
+                  setBookmarks(bookmarks.map(b => b.id === id ? updated : b))
+                }}
               />
-
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Loading EPUB...</p>
             </div>
-          )
+          )}
+          </ReaderErrorBoundary>
         ) : book.content ? (
           <>
             <div
+              ref={bookContentRef}
               id="book-content"
               className={`reader-content-wrapper ${distractionFree ? "py-8 px-3 md:py-12 md:px-8 lg:px-16" : "p-3 sm:p-6 md:p-8"}`}
               style={{
-                fontFamily: fontFamily,
+                fontFamily: fontFamily.includes(" ") ? `"${fontFamily}"` : fontFamily,
                 fontSize: `${fontSize}px`,
                 lineHeight: lineHeight,
-                maxWidth: `${maxWidth}ch`,
-                marginLeft: "auto",
-                marginRight: "auto",
+                maxWidth: "100%", // Already constrained by parent
                 ["--para-gap" as any]: `${paragraphSpacing}rem`,
               } as React.CSSProperties}
             >
               {/* Reading Mode Layout - Centered, optimal line length */}
-              <article className="text-justify leading-relaxed select-text whitespace-pre-wrap break-words">
+              <article 
+                className="text-justify select-text whitespace-pre-wrap break-words"
+                style={{
+                  fontFamily: fontFamily.includes(" ") ? `"${fontFamily}"` : fontFamily,
+                  fontSize: `${fontSize}px`,
+                  lineHeight: lineHeight,
+                }}
+              >
                 {book.content.split(/\n\s*\n/).map((paragraph, index) => (
                   <p 
                     key={index} 
@@ -1728,57 +2238,10 @@ export default function ReaderPage() {
 
 
         {/* Keyboard Shortcuts Help Dialog */}
-        <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-          <DialogContent data-shortcuts-dialog className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Keyboard className="h-5 w-5" />
-                Keyboard Shortcuts
-              </DialogTitle>
-              <DialogDescription>
-                Speed up your reading workflow with these shortcuts
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Reading</h3>
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Save selection</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">S</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Mark known / Dismiss</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">K</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Open settings</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">A</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Open Contents (TOC)</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">C</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Go to Review</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">R</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Close popover / dialog</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">Esc</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Show shortcuts</span>
-                    <kbd className="px-2 py-1 text-xs font-semibold bg-muted rounded border">?</kbd>
-                  </div>
-                </div>
-              </div>
-              <div className="pt-2 border-t text-xs text-muted-foreground">
-                <p>Shortcuts only work when not typing in input fields.</p>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <KeyboardShortcutsOverlay
+          isOpen={shortcutsOpen}
+          onClose={() => setShortcutsOpen(false)}
+        />
 
         {/* Translation UI - Adaptive: Popover on desktop, Drawer on mobile */}
         {isMobile ? (
@@ -1957,6 +2420,18 @@ export default function ReaderPage() {
                 }
               }
             }}
+          />
+        )}
+
+        {/* Bottom Status Pill - Calm progress indicator */}
+        {!distractionFree && (
+          <ReadingProgressIndicator
+            progress={readingProgress}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            currentChapter={currentChapter}
+            bookType={book.type as "epub" | "pdf" | "text"}
+            onTocClick={book.type === "epub" ? () => setTocOpen(true) : undefined}
           />
         )}
       </div>

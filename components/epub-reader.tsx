@@ -20,6 +20,7 @@ interface EpubReaderProps {
   fontSize?: number
   fontFamily?: string
   lineHeight?: number
+  theme?: "light" | "sepia" | "dark" | "paper"
   knownWords?: Set<string> // Set of normalized known words (lowercase, trimmed)
   vocabularyWords?: Set<string> // Set of normalized vocabulary words (saved but not known)
   hasKnownWordsData?: boolean // Whether vocabulary data has been loaded
@@ -35,6 +36,7 @@ export function EpubReader({
   fontSize = 16,
   fontFamily = "Inter",
   lineHeight = 1.6,
+  theme = "light",
   knownWords = new Set(),
   vocabularyWords = new Set(),
   hasKnownWordsData = false,
@@ -62,29 +64,178 @@ export function EpubReader({
     }
   }, [rendition, book]) // Don't include onRenditionReady in deps
 
-  // Update styles when they change
+  // Throttled theme update ref
+  const throttledThemeUpdateRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Register EPUB themes and apply when they change using CSS variables
   useEffect(() => {
-    if (rendition) {
-      // Register and apply theme updates
-      rendition.themes.register("custom", {
+    if (!rendition) return
+
+    const injectThemeStyles = () => {
+      const iframe = viewerRef.current?.querySelector("iframe")
+      if (!iframe?.contentDocument) return
+
+      const doc = iframe.contentDocument
+      const oldStyle = doc.getElementById("epub-theme-override")
+      if (oldStyle) oldStyle.remove()
+
+      const style = doc.createElement("style")
+      style.id = "epub-theme-override"
+      
+      // Get CSS variables from parent document
+      const root = document.documentElement
+      const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
+      const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+      
+      style.textContent = `
+        html, body {
+          background: var(--reader-paper, ${bg}) !important;
+          color: var(--reader-fg, ${fg}) !important;
+        }
+        body * {
+          color: var(--reader-fg, ${fg}) !important;
+        }
+        ::selection {
+          background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+        }
+        div, section, article, p {
+          background: var(--reader-paper, ${bg}) !important;
+        }
+      `
+      doc.head.appendChild(style)
+
+      // Also set inline styles as fallback
+      if (doc.body) {
+        doc.body.style.backgroundColor = bg
+        doc.body.style.color = fg
+      }
+    }
+
+    // Register epubjs themes using CSS variables
+    rendition.themes.register("light", {
+      body: {
+        "font-family": `"${fontFamily}", serif !important`,
+        "font-size": `${fontSize}px !important`,
+        "line-height": `${lineHeight} !important`,
+        "background-color": "var(--reader-paper) !important",
+        "color": "var(--reader-fg) !important",
+      },
+      "*": {
+        "font-family": `"${fontFamily}", serif !important`,
+      },
+    })
+    
+    rendition.themes.register("sepia", {
+      body: {
+        "font-family": `"${fontFamily}", serif !important`,
+        "font-size": `${fontSize}px !important`,
+        "line-height": `${lineHeight} !important`,
+        "background-color": "var(--reader-paper) !important",
+        "color": "var(--reader-fg) !important",
+      },
+      "*": {
+        "font-family": `"${fontFamily}", serif !important`,
+      },
+    })
+    
+    rendition.themes.register("dark", {
+      body: {
+        "font-family": `"${fontFamily}", serif !important`,
+        "font-size": `${fontSize}px !important`,
+        "line-height": `${lineHeight} !important`,
+        "background-color": "var(--reader-paper) !important",
+        "color": "var(--reader-fg) !important",
+      },
+      "*": {
+        "font-family": `"${fontFamily}", serif !important`,
+      },
+    })
+
+    // Select the appropriate theme (map paper to light)
+    const themeToSelect = theme === "paper" ? "light" : theme
+    rendition.themes.select(themeToSelect)
+
+    injectThemeStyles()
+    setTimeout(injectThemeStyles, 100)
+    
+    // Re-inject on relocation
+    const handleRelocated = () => {
+      setTimeout(injectThemeStyles, 50)
+    }
+    rendition.on("relocated", handleRelocated)
+
+    return () => {
+      rendition.off("relocated", handleRelocated)
+    }
+  }, [rendition, theme])
+
+  // Throttled settings application (font size, family, line height)
+  useEffect(() => {
+    if (!rendition) return
+
+    // Clear pending update
+    if (throttledThemeUpdateRef.current) {
+      clearTimeout(throttledThemeUpdateRef.current)
+    }
+
+    // Update UI immediately (for instant feedback)
+    // But throttle actual rendition update
+    throttledThemeUpdateRef.current = setTimeout(() => {
+      // Apply theme override (not full remount)
+      rendition.themes.override({
         body: {
           "font-family": `"${fontFamily}", serif !important`,
           "font-size": `${fontSize}px !important`,
           "line-height": `${lineHeight} !important`,
-          "background-color": "transparent !important", // Let parent theme control background
-          "color": "inherit !important", // Inherit text color from parent
-        },
-        "*": {
-          "font-family": `"${fontFamily}", serif !important`,
         },
       })
-      rendition.themes.select("custom")
-      // Force a re-render to apply the changes
-      rendition.views().forEach((view: any) => {
-        if (view.pkg) {
-          view.render()
+
+      // Re-inject CSS variables
+      const injectThemeStyles = () => {
+        const iframe = viewerRef.current?.querySelector("iframe")
+        if (!iframe?.contentDocument) return
+
+        const doc = iframe.contentDocument
+        const oldStyle = doc.getElementById("epub-theme-override")
+        if (oldStyle) oldStyle.remove()
+
+        const style = doc.createElement("style")
+        style.id = "epub-theme-override"
+        
+        const root = document.documentElement
+        const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
+        const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+        
+        style.textContent = `
+          html, body {
+            background: var(--reader-paper, ${bg}) !important;
+            color: var(--reader-fg, ${fg}) !important;
+          }
+          body * {
+            color: var(--reader-fg, ${fg}) !important;
+          }
+          ::selection {
+            background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+          }
+          div, section, article, p {
+            background: var(--reader-paper, ${bg}) !important;
+          }
+        `
+        doc.head.appendChild(style)
+
+        if (doc.body) {
+          doc.body.style.backgroundColor = bg
+          doc.body.style.color = fg
         }
-      })
+      }
+
+      injectThemeStyles()
+    }, 100) // 100ms throttle
+
+    return () => {
+      if (throttledThemeUpdateRef.current) {
+        clearTimeout(throttledThemeUpdateRef.current)
+      }
     }
   }, [rendition, fontSize, fontFamily, lineHeight])
 
@@ -141,43 +292,59 @@ export function EpubReader({
 
         const doc = iframe.contentDocument
         const win = iframe.contentWindow
+        
+        // Get CSS variables from parent document
+        const root = document.documentElement
+        const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
+        const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
 
-        // Inject CSS for word highlighting
+        // Inject CSS for word highlighting - use CSS variables
         const styleId = "epub-word-interactions"
-        if (!doc.getElementById(styleId)) {
-          const style = doc.createElement("style")
-          style.id = styleId
-          style.textContent = `
-            /* Inherit theme colors from parent */
-            body {
-              background-color: inherit !important;
-              color: inherit !important;
-            }
+        // Remove old style if exists (to update theme)
+        const oldStyle = doc.getElementById(styleId)
+        if (oldStyle) oldStyle.remove()
+        
+        const style = doc.createElement("style")
+        style.id = styleId
+        style.textContent = `
+          /* Force theme colors - no inheritance issues */
+          html, body {
+            background-color: var(--reader-paper, ${bg}) !important;
+            color: var(--reader-fg, ${fg}) !important;
+          }
             
             .epub-word {
-              cursor: pointer;
+              /* No visual indicators by default - invisible until interaction */
               transition: background-color 0.2s ease;
               border-radius: 2px;
               padding: 0 1px;
             }
-            .epub-word:hover {
-              background-color: rgba(59, 130, 246, 0.3) !important;
+            /* Only show cursor and hover on desktop (not touch devices) */
+            @media (hover: hover) and (pointer: fine) {
+              .epub-word {
+                cursor: pointer;
+              }
+              .epub-word:hover {
+                background-color: rgba(59, 130, 246, 0.2) !important;
+              }
             }
             .epub-word.selected {
-              background-color: rgba(59, 130, 246, 0.5) !important;
+              background-color: rgba(59, 130, 246, 0.4) !important;
             }
-            /* Mark unknown words with yellow highlight */
+            /* Mark saved vocabulary words subtly (only after being saved) */
             .epub-word.unknown-word {
-              background-color: rgba(234, 179, 8, 0.25) !important;
-              border-bottom: 2px solid rgba(234, 179, 8, 0.6) !important;
+              /* Very subtle highlight - only visible on close inspection */
+              background-color: rgba(147, 51, 234, 0.12) !important;
+              border-bottom: 1px solid rgba(147, 51, 234, 0.25) !important;
               padding-bottom: 1px;
             }
-            .epub-word.unknown-word:hover {
-              background-color: rgba(234, 179, 8, 0.4) !important;
+            @media (hover: hover) and (pointer: fine) {
+              .epub-word.unknown-word:hover {
+                background-color: rgba(147, 51, 234, 0.2) !important;
+              }
             }
           `
-          doc.head.appendChild(style)
-        }
+        doc.head.appendChild(style)
 
         // Function to wrap words in spans
         const wrapWords = (element: Element) => {
@@ -280,10 +447,116 @@ export function EpubReader({
           }
         }
 
-        // Function to handle word click
-        const handleWordClick = (e: MouseEvent) => {
-          const target = e.target as HTMLElement
-          if (target.classList.contains("epub-word")) {
+        // Function to get word at point using caret APIs (for mobile taps)
+        const getWordAtPoint = (x: number, y: number): { word: string; element: HTMLElement | null } => {
+          try {
+            // Try caretRangeFromPoint (most browsers)
+            let range: Range | null = null
+            if (doc.caretRangeFromPoint) {
+              range = doc.caretRangeFromPoint(x, y)
+            } else if ((win as any).caretPositionFromPoint) {
+              // Safari fallback
+              const pos = (win as any).caretPositionFromPoint(x, y)
+              if (pos) {
+                range = doc.createRange()
+                range.setStart(pos.offsetNode, pos.offset)
+                range.setEnd(pos.offsetNode, pos.offset)
+              }
+            }
+
+            if (range) {
+              // Expand range to word boundaries
+              const expandToWordBoundaries = (r: Range) => {
+                const startNode = r.startContainer
+                const endNode = r.endContainer
+                
+                // Only expand if both containers are text nodes and the same node
+                if (startNode.nodeType !== Node.TEXT_NODE || 
+                    endNode.nodeType !== Node.TEXT_NODE || 
+                    startNode !== endNode) {
+                  return
+                }
+                
+                const text = startNode.textContent || ""
+                let startOffset = r.startOffset
+                let endOffset = r.endOffset
+                
+                // Expand backwards to find word start (word characters and apostrophes)
+                while (startOffset > 0) {
+                  const char = text[startOffset - 1]
+                  // Stop at whitespace or non-word characters (except apostrophes)
+                  if (/\s/.test(char) || (!/\w/.test(char) && char !== "'")) {
+                    break
+                  }
+                  startOffset--
+                }
+                
+                // Expand forwards to find word end (word characters and apostrophes)
+                while (endOffset < text.length) {
+                  const char = text[endOffset]
+                  // Stop at whitespace or non-word characters (except apostrophes)
+                  if (/\s/.test(char) || (!/\w/.test(char) && char !== "'")) {
+                    break
+                  }
+                  endOffset++
+                }
+                
+                r.setStart(startNode, startOffset)
+                r.setEnd(endNode, endOffset)
+              }
+              
+              expandToWordBoundaries(range)
+              const word = range.toString().trim()
+              const container = range.commonAncestorContainer
+              const element = container.nodeType === Node.TEXT_NODE
+                ? container.parentElement
+                : container as HTMLElement
+
+              // Check if we hit an epub-word span
+              if (element && element.classList.contains("epub-word")) {
+                return { word: element.getAttribute("data-word") || word, element }
+              }
+
+              // Otherwise, try to find the word span
+              if (element) {
+                const wordSpan = element.closest(".epub-word") as HTMLElement
+                if (wordSpan) {
+                  return { word: wordSpan.getAttribute("data-word") || word, element: wordSpan }
+                }
+              }
+
+              return { word, element: element as HTMLElement }
+            }
+          } catch (e) {
+            console.debug("Error getting word at point:", e)
+          }
+          return { word: "", element: null }
+        }
+
+        // Function to handle word click/tap
+        const handleWordInteraction = (e: MouseEvent | TouchEvent | PointerEvent) => {
+          let target: HTMLElement | null = null
+          let clientX = 0
+          let clientY = 0
+
+          // Handle different event types
+          if (e.type === "touchstart" || e.type === "touchend") {
+            const touchEvent = e as TouchEvent
+            if (touchEvent.touches.length > 0 || touchEvent.changedTouches.length > 0) {
+              const touch = touchEvent.touches[0] || touchEvent.changedTouches[0]
+              clientX = touch.clientX
+              clientY = touch.clientY
+              target = doc.elementFromPoint(clientX, clientY) as HTMLElement
+            }
+          } else if (e.type === "pointerup" || e.type === "click") {
+            const mouseEvent = e as MouseEvent
+            clientX = mouseEvent.clientX
+            clientY = mouseEvent.clientY
+            target = mouseEvent.target as HTMLElement
+          }
+
+          // Check if target is an epub-word
+          if (target && target.classList.contains("epub-word")) {
             e.preventDefault()
             e.stopPropagation()
             
@@ -305,6 +578,27 @@ export function EpubReader({
               // Call the text selection handler with context
               onTextSelected(cleanWord, "", context)
             }
+          } else if (target && (e.type === "pointerup" || e.type === "touchend")) {
+            // For mobile taps, try to get word at tap point
+            const { word, element } = getWordAtPoint(clientX, clientY)
+            if (word && element && element.classList.contains("epub-word")) {
+              e.preventDefault()
+              e.stopPropagation()
+
+              // Remove previous selection
+              doc.querySelectorAll(".epub-word.selected").forEach((el) => {
+                el.classList.remove("selected")
+              })
+
+              // Highlight tapped word
+              element.classList.add("selected")
+
+              // Get context around the word
+              const context = getContextAroundWord(element)
+
+              // Call the text selection handler
+              onTextSelected(word.trim(), "", context)
+            }
           }
         }
 
@@ -325,9 +619,13 @@ export function EpubReader({
           }
         })
 
-        // Attach event listeners
-        doc.addEventListener("click", handleWordClick, true)
-        doc.addEventListener("mouseover", handleWordHover, true)
+        // Attach event listeners - prioritize pointerup for better mobile support
+        // Pointer events work for both mouse and touch and are preferred
+        doc.addEventListener("pointerup", handleWordInteraction, { capture: true, passive: false })
+        // Fallback for browsers without pointer events
+        doc.addEventListener("touchend", handleWordInteraction, { capture: true, passive: false })
+        doc.addEventListener("click", handleWordInteraction, { capture: true, passive: false })
+        doc.addEventListener("mouseover", handleWordHover, { capture: true })
 
         // Also handle regular text selection as fallback
         const handleSelection = () => {
@@ -380,7 +678,9 @@ export function EpubReader({
 
         // Cleanup function
         return () => {
-          doc.removeEventListener("click", handleWordClick, true)
+          doc.removeEventListener("pointerup", handleWordInteraction, true)
+          doc.removeEventListener("click", handleWordInteraction, true)
+          doc.removeEventListener("touchend", handleWordInteraction, true)
           doc.removeEventListener("mouseover", handleWordHover, true)
           doc.removeEventListener("mouseup", handleSelection)
         }
@@ -407,6 +707,50 @@ export function EpubReader({
       setTimeout(() => {
         cleanupFn = setupWordInteractions()
       }, 300)
+      
+      // Re-inject theme styles on relocation using CSS variables
+      const injectThemeOnRelocate = () => {
+        const iframe = viewerRef.current?.querySelector("iframe")
+        if (!iframe?.contentDocument) return
+
+        const doc = iframe.contentDocument
+        const oldStyle = doc.getElementById("epub-theme-override")
+        if (oldStyle) oldStyle.remove()
+
+        const style = doc.createElement("style")
+        style.id = "epub-theme-override"
+        
+        // Get CSS variables from parent document
+        const root = document.documentElement
+        const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
+        const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+        
+        style.textContent = `
+          html, body {
+            background: var(--reader-paper, ${bg}) !important;
+            color: var(--reader-fg, ${fg}) !important;
+          }
+          body * {
+            color: var(--reader-fg, ${fg}) !important;
+          }
+          ::selection {
+            background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+          }
+          div, section, article, p {
+            background: var(--reader-paper, ${bg}) !important;
+          }
+        `
+        doc.head.appendChild(style)
+
+        // Also set inline styles as fallback
+        if (doc.body) {
+          doc.body.style.backgroundColor = bg
+          doc.body.style.color = fg
+        }
+      }
+      
+      injectThemeOnRelocate()
+      setTimeout(injectThemeOnRelocate, 100)
     }
     
     if (rendition) {
@@ -422,7 +766,7 @@ export function EpubReader({
         rendition.off("relocated", handleRelocated)
       }
     }
-  }, [onTextSelected, rendition, viewerRef])
+  }, [onTextSelected, rendition, viewerRef, theme])
 
   if (error) {
     return (
@@ -539,10 +883,28 @@ export function EpubReader({
     return () => clearTimeout(timeout)
   }, [url, loading, rendition])
 
+  // Get CSS variables for background
+  const root = typeof document !== 'undefined' ? document.documentElement : null
+  const bg = root ? getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff" : "#ffffff"
+  const fg = root ? getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111" : "#111"
+  
   return (
-    <div ref={viewerRef} className="w-full h-full" style={{ position: "relative" }}>
+    <div 
+      ref={viewerRef} 
+      className="w-full h-full" 
+      style={{ 
+        position: "relative",
+        backgroundColor: `var(--reader-paper, ${bg})`,
+        color: `var(--reader-fg, ${fg})`,
+      }}
+    >
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm z-10">
+        <div 
+          className="absolute inset-0 flex flex-col items-center justify-center backdrop-blur-sm z-10"
+          style={{
+            backgroundColor: `${bg}CC`, // 80% opacity
+          }}
+        >
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="mt-4 text-sm text-muted-foreground">Loading EPUB...</p>
         </div>
@@ -569,18 +931,118 @@ export function EpubReader({
           }
           setLoading(false)
           setError(null) // Clear any previous errors
-          // Apply initial styles
-          rend.themes.register("custom", {
+          
+          // Register all EPUB themes using CSS variables
+          rend.themes.register("light", {
             body: {
               "font-family": `"${fontFamily}", serif !important`,
               "font-size": `${fontSize}px !important`,
               "line-height": `${lineHeight} !important`,
+              "background-color": "var(--reader-paper) !important",
+              "color": "var(--reader-fg) !important",
             },
             "*": {
               "font-family": `"${fontFamily}", serif !important`,
             },
           })
-          rend.themes.select("custom")
+          
+          rend.themes.register("sepia", {
+            body: {
+              "font-family": `"${fontFamily}", serif !important`,
+              "font-size": `${fontSize}px !important`,
+              "line-height": `${lineHeight} !important`,
+              "background-color": "var(--reader-paper) !important",
+              "color": "var(--reader-fg) !important",
+            },
+            "*": {
+              "font-family": `"${fontFamily}", serif !important`,
+            },
+          })
+          
+          rend.themes.register("dark", {
+            body: {
+              "font-family": `"${fontFamily}", serif !important`,
+              "font-size": `${fontSize}px !important`,
+              "line-height": `${lineHeight} !important`,
+              "background-color": "var(--reader-paper) !important",
+              "color": "var(--reader-fg) !important",
+            },
+            "*": {
+              "font-family": `"${fontFamily}", serif !important`,
+            },
+          })
+          
+          // Select the appropriate theme (map paper to light)
+          const themeToSelect = theme === "paper" ? "light" : theme
+          rend.themes.select(themeToSelect)
+          
+          // Inject theme styles using CSS variables
+          const injectTheme = () => {
+            const iframe = viewerRef.current?.querySelector("iframe")
+            if (!iframe?.contentDocument) return
+
+            const doc = iframe.contentDocument
+            const oldStyle = doc.getElementById("epub-theme-override")
+            if (oldStyle) oldStyle.remove()
+
+            const style = doc.createElement("style")
+            style.id = "epub-theme-override"
+            
+            // Get CSS variables from parent document
+            const root = document.documentElement
+            const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
+            const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+            
+            style.textContent = `
+              html, body {
+                background: var(--reader-paper, ${bg}) !important;
+                color: var(--reader-fg, ${fg}) !important;
+              }
+              body * {
+                color: var(--reader-fg, ${fg}) !important;
+              }
+              ::selection {
+                background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+              }
+              div, section, article, p {
+                background: var(--reader-paper, ${bg}) !important;
+              }
+            `
+            doc.head.appendChild(style)
+
+            // Also set inline styles as fallback
+            if (doc.body) {
+              doc.body.style.backgroundColor = bg
+              doc.body.style.color = fg
+            }
+          }
+          
+          // Inject immediately
+          injectTheme()
+          // Also inject after a delay to catch late-rendered content
+          setTimeout(injectTheme, 100)
+          setTimeout(injectTheme, 500)
+          
+          // Configure single page view (no spread)
+          rend.display().then(() => {
+            try {
+              // Set spread to 'none' for single page view
+              if (rend.spread) {
+                rend.spread('none')
+              }
+              // Force single page by setting view width to 100%
+              const views = rend.views()
+              if (views && views.length > 0) {
+                views.forEach((view: any) => {
+                  if (view.manager) {
+                    view.manager.setViewportSize(window.innerWidth, window.innerHeight)
+                  }
+                })
+              }
+            } catch (e) {
+              console.debug("Error setting single page view:", e)
+            }
+          })
         }}
         epubOptions={{
           openAs: "epub" as any,

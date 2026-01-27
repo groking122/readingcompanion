@@ -9,7 +9,7 @@ import JSZip from "jszip"
 // and redirects them to /api/books/{id}/epub/META-INF/container.xml
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; path: string[] } }
+  { params }: { params: Promise<{ id: string; path: string[] }> }
 ) {
   try {
     const user = await currentUser()
@@ -17,8 +17,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const bookId = params.id
-    const filePath = params.path.join("/")
+    const { id: bookId, path } = await params
+    const filePath = path.join("/")
 
     // Get book from database
     const [book] = await db

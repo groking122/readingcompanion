@@ -26,7 +26,7 @@ export function TocDrawer({ toc, isOpen, onClose, onNavigate, currentLocation }:
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />

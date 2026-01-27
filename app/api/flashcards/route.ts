@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { db } from "@/db"
 import { flashcards, vocabulary, reviewAttempts } from "@/db/schema"
-import { eq, and, lte, asc } from "drizzle-orm"
+import { eq, and, lte, asc, desc, isNotNull, inArray, sql } from "drizzle-orm"
 import { updateCard } from "@/lib/sm2"
 import { trackMetric, logError, logWarning } from "@/lib/metrics"
 
@@ -201,6 +201,203 @@ export async function PATCH(request: NextRequest) {
     
     return NextResponse.json(
       { error: "Failed to update flashcard" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await currentUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { flashcardId, vocabularyId } = body as { flashcardId?: string; vocabularyId?: string }
+
+    if (!flashcardId && !vocabularyId) {
+      return NextResponse.json(
+        { error: "flashcardId or vocabularyId is required" },
+        { status: 400 }
+      )
+    }
+
+    // Find flashcard by ID or vocabularyId
+    let flashcard
+    if (flashcardId) {
+      const [found] = await db
+        .select()
+        .from(flashcards)
+        .where(
+          and(eq(flashcards.id, flashcardId), eq(flashcards.userId, user.id))
+        )
+        .limit(1)
+      
+      if (!found) {
+        return NextResponse.json(
+          { error: "Flashcard not found" },
+          { status: 404 }
+        )
+      }
+      flashcard = found
+    } else if (vocabularyId) {
+      const [found] = await db
+        .select()
+        .from(flashcards)
+        .where(
+          and(
+            eq(flashcards.vocabularyId, vocabularyId),
+            eq(flashcards.userId, user.id)
+          )
+        )
+        .limit(1)
+      
+      if (!found) {
+        return NextResponse.json(
+          { error: "Flashcard not found for this vocabulary" },
+          { status: 404 }
+        )
+      }
+      flashcard = found
+    }
+
+    if (!flashcard) {
+      return NextResponse.json(
+        { error: "Flashcard not found" },
+        { status: 404 }
+      )
+    }
+
+    // Reset dueAt to now (make it due immediately)
+    const now = new Date()
+    const [updatedFlashcard] = await db
+      .update(flashcards)
+      .set({
+        dueAt: now,
+      })
+      .where(eq(flashcards.id, flashcard.id))
+      .returning()
+
+    trackMetric("flashcard_reset", {
+      userId: user.id,
+      metadata: {
+        flashcardId: flashcard.id,
+        vocabularyId: flashcard.vocabularyId,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      flashcard: updatedFlashcard,
+    })
+  } catch (error) {
+    const errorUser = await currentUser().catch(() => null)
+    
+    logError("Error resetting flashcard", error, {
+      userId: errorUser?.id,
+      endpoint: "/api/flashcards",
+    })
+    
+    return NextResponse.json(
+      { error: "Failed to reset flashcard" },
+      { status: 500 }
+    )
+  }
+}
+
+// Bulk reset recently reviewed flashcards
+export async function PUT(request: NextRequest) {
+  try {
+    const user = await currentUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { count } = body as { count?: number }
+
+    // Get total count of reviewed flashcards
+    const totalReviewed = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(flashcards)
+      .where(
+        and(
+          eq(flashcards.userId, user.id),
+          isNotNull(flashcards.lastReviewedAt)
+        )
+      )
+
+    const totalCount = Number(totalReviewed[0]?.count || 0)
+
+    // Smart default: reset 50 words, or all if user has fewer than 50
+    // If user has many words, reset up to 50 (good practice session size)
+    // If user has fewer than 50, reset all of them
+    const resetCount = count ?? Math.min(50, totalCount)
+
+    // Get recently reviewed flashcards (most recently reviewed first)
+    const recentlyReviewed = await db
+      .select({
+        id: flashcards.id,
+        vocabularyId: flashcards.vocabularyId,
+        lastReviewedAt: flashcards.lastReviewedAt,
+      })
+      .from(flashcards)
+      .where(
+        and(
+          eq(flashcards.userId, user.id),
+          isNotNull(flashcards.lastReviewedAt)
+        )
+      )
+      .orderBy(desc(flashcards.lastReviewedAt))
+      .limit(resetCount)
+
+    if (recentlyReviewed.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "No recently reviewed flashcards found",
+        resetCount: 0,
+      })
+    }
+
+    // Reset all of them to be due now
+    const now = new Date()
+    const flashcardIds = recentlyReviewed.map(fc => fc.id)
+    
+    await db
+      .update(flashcards)
+      .set({
+        dueAt: now,
+      })
+      .where(
+        and(
+          eq(flashcards.userId, user.id),
+          inArray(flashcards.id, flashcardIds)
+        )
+      )
+
+    trackMetric("flashcard_bulk_reset", {
+      userId: user.id,
+      metadata: {
+        resetCount: recentlyReviewed.length,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      resetCount: recentlyReviewed.length,
+      message: `Reset ${recentlyReviewed.length} flashcards to be due now`,
+    })
+  } catch (error) {
+    const errorUser = await currentUser().catch(() => null)
+    
+    logError("Error bulk resetting flashcards", error, {
+      userId: errorUser?.id,
+      endpoint: "/api/flashcards",
+    })
+    
+    return NextResponse.json(
+      { error: "Failed to reset flashcards" },
       { status: 500 }
     )
   }

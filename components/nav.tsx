@@ -31,12 +31,10 @@ export function Nav() {
   return (
     <>
       <nav 
-        className="theme-surface sticky top-0 z-50 w-full overflow-hidden !border-0"
+        className="theme-surface sticky top-0 z-50 w-full overflow-hidden !border-0 backdrop-blur-md"
         style={{ 
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+          backgroundColor: 'hsl(var(--background) / 0.7)',
+          borderBottom: '1px solid hsl(var(--border) / 0.2)',
           outline: 'none',
           boxShadow: 'none'
         }}
@@ -46,11 +44,7 @@ export function Nav() {
           <div className="flex items-center">
             <Link 
               href="/" 
-              className="text-lg font-serif font-bold tracking-tight transition-all duration-300 hover:opacity-80 md:text-xl relative cursor-pointer"
-              style={{
-                color: '#ffffff',
-                textShadow: '0 0 20px rgba(255, 255, 255, 0.3)'
-              }}
+              className="text-lg font-serif font-bold tracking-tight transition-all duration-300 hover:opacity-80 md:text-xl relative cursor-pointer text-foreground"
             >
               Lexis
             </Link>
@@ -67,18 +61,18 @@ export function Nav() {
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 relative group",
                     isActive
-                      ? "text-white"
-                      : "text-gray-400 hover:text-white"
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <span className="relative">
                     {item.label}
                     {isActive && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-white rounded-full z-10" />
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground rounded-full z-10" />
                     )}
                     <span className={cn(
-                      "absolute bottom-0 left-1/2 h-0.5 w-0 bg-white/30 -translate-x-1/2 group-hover:w-full transition-all duration-300 ease-out rounded-full",
-                      isActive && "group-hover:bg-white/50"
+                      "absolute bottom-0 left-1/2 h-0.5 w-0 bg-foreground/30 -translate-x-1/2 group-hover:w-full transition-all duration-300 ease-out rounded-full",
+                      isActive && "group-hover:bg-foreground/50"
                     )} />
                   </span>
                 </Link>
@@ -93,7 +87,7 @@ export function Nav() {
               variant="ghost"
               size="sm"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden h-9 w-9 p-0 text-white hover:bg-white/10"
+              className="md:hidden h-9 w-9 p-0 text-foreground hover:bg-foreground/10"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
@@ -117,7 +111,7 @@ export function Nav() {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden transition-opacity"
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />
