@@ -68,13 +68,14 @@ function dispatchThemeChange() {
  */
 export function applyTheme(themeIndex: number): void {
   if (themeIndex < 0 || themeIndex >= themes.length) {
-    console.warn(`Theme index ${themeIndex} is out of range. Using theme 4 (Jet Black).`)
-    themeIndex = 4
+    console.warn(`Theme index ${themeIndex} is out of range. Using theme 0 (Lavender Storm).`)
+    themeIndex = 0
   }
 
   const root = document.documentElement
   const theme = themes[themeIndex]
   
+  // Apply all theme colors
   theme.colors.forEach((color, index) => {
     root.style.setProperty(colorVars[index], color)
   })
@@ -145,6 +146,24 @@ export function toggleBlackWhite(): void {
 }
 
 /**
+ * Cycle through themes - public function that can be called directly
+ */
+export function cycleTheme(): void {
+  // Don't cycle if black/white is active
+  if (isBlackWhiteActive()) {
+    return
+  }
+  
+  let currentIndex = parseInt(localStorage.getItem('user-theme-index') || '0', 10)
+  // Ensure index is valid
+  if (currentIndex < 0 || currentIndex >= themes.length) {
+    currentIndex = 0
+  }
+  currentIndex = (currentIndex + 1) % themes.length
+  applyTheme(currentIndex)
+}
+
+/**
  * Initialize theme system and return cycle function
  */
 export function initThemeSystem(): () => void {
@@ -154,36 +173,44 @@ export function initThemeSystem(): () => void {
   if (isBlackWhite) {
     applyBlackWhiteTheme()
   } else {
-    // Check localStorage or default to 4 (Jet Black)
-    let currentIndex = parseInt(localStorage.getItem('user-theme-index') || '4', 10)
+    // Check localStorage or default to 0 (Lavender Storm) instead of 4
+    let currentIndex = parseInt(localStorage.getItem('user-theme-index') || '0', 10)
     
     // Safety check
     if (currentIndex < 0 || currentIndex >= themes.length) {
-      currentIndex = 4
+      currentIndex = 0
     }
     
-    // Apply initial theme (this will set data-theme attribute for Jet Black)
+    // Apply initial theme
     applyTheme(currentIndex)
   }
 
-  // Return cycle function - cycles through color themes
-  return function cycleTheme() {
-    // Don't cycle if black/white is active
-    if (isBlackWhiteActive()) {
-      return
-    }
-    
-    let currentIndex = parseInt(localStorage.getItem('user-theme-index') || '4', 10)
-    currentIndex = (currentIndex + 1) % themes.length
-    applyTheme(currentIndex)
-  }
+  // Return cycle function that calls the public function
+  return cycleTheme
 }
 
 /**
  * Get current theme index from localStorage
  */
 export function getCurrentThemeIndex(): number {
-  const index = parseInt(localStorage.getItem('user-theme-index') || '4', 10)
-  return index >= 0 && index < themes.length ? index : 4
+  const index = parseInt(localStorage.getItem('user-theme-index') || '0', 10)
+  return index >= 0 && index < themes.length ? index : 0
+}
+
+/**
+ * Get all available themes (for debugging or UI display)
+ */
+export function getAllThemes(): Theme[] {
+  return themes
+}
+
+/**
+ * Get theme by index
+ */
+export function getTheme(themeIndex: number): Theme | null {
+  if (themeIndex < 0 || themeIndex >= themes.length) {
+    return null
+  }
+  return themes[themeIndex]
 }
 

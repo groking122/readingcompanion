@@ -85,77 +85,15 @@
     --reader-transition-fast: 120ms;
     --reader-transition-normal: 180ms;
     
-    /* Reading Theme Variables - Two-layer model */
-    --reading-bg-light: #ffffff;
-    --reading-bg-sepia: #f4ecd8;
-    --reading-bg-dark: #1a1a1a;
-    --reading-bg-paper: #faf8f3;
-    
-    --reading-text-light: #292B30;
-    --reading-text-sepia: #292B30;
-    --reading-text-dark: #e0e0e0;
-    --reading-text-paper: #292B30;
-    
     /* Reading Surface Width */
     --reading-width-comfort: 65ch;
     --reading-width-wide: 75ch;
-    
-    /* Reader root CSS variables - default to light */
-    --reader-bg: #f6f6f6;
-    --reader-fg: #111;
-    --reader-paper: #ffffff;
   }
   
-  /* Reader root theme variants */
-  .reader-root[data-reader-theme="light"] {
-    --reader-bg: #f6f6f6;
-    --reader-fg: #111;
-    --reader-paper: #ffffff;
-  }
-  
-  .reader-root[data-reader-theme="sepia"] {
-    --reader-bg: #e9dfc7;
-    --reader-fg: #1b1b1b;
-    --reader-paper: #f4ecd8;
-  }
-  
-  .reader-root[data-reader-theme="dark"] {
-    --reader-bg: #0b0b0c;
-    --reader-fg: #eaeaea;
-    --reader-paper: #121214;
-  }
-  
-  .reader-root[data-reader-theme="paper"] {
-    --reader-bg: #faf8f3;
-    --reader-fg: #292B30;
-    --reader-paper: #ffffff;
-  }
-  
-  /* Reader theme variables - single source of truth */
-  .reader-root[data-reader-theme="light"] {
-    --reader-muted: #666;
-    --reader-border: #e0e0e0;
-  }
-  
-  .reader-root[data-reader-theme="sepia"] {
-    --reader-muted: #8b7355;
-    --reader-border: #d4c4a8;
-  }
-  
-  .reader-root[data-reader-theme="dark"] {
-    --reader-muted: #888;
-    --reader-border: #2a2a2a;
-  }
-  
-  .reader-root[data-reader-theme="paper"] {
-    --reader-muted: #666;
-    --reader-border: #d4c4a8;
-  }
-  
-  /* Paper mode wrapper */
+  /* Paper mode wrapper - uses general theme colors */
   .reader-paper-surface {
-    background: var(--reader-paper);
-    border: 1px solid var(--reader-border);
+    background: var(--c-canvas, var(--background));
+    border: 1px solid var(--c-soft, var(--border));
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     border-radius: 4px;
     padding: 2rem;
@@ -242,38 +180,15 @@
   
   /* Shadows removed per minimalist design system */
   
-  .hover-lift {
-    transition: transform 300ms ease-out;
-  }
-  
-  .hover-lift:hover {
-    transform: translateY(-2px);
-  }
+  /* hover-lift can be replaced with: transition-transform hover:-translate-y-0.5 */
   
   /* Sophisticated focus states */
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
   
-  /* Smooth fade-in animations */
-  .fade-in {
-    animation: fadeIn 0.4s ease-out;
-  }
-  
-  .fade-in-delay {
-    animation: fadeIn 0.6s ease-out 0.1s both;
-  }
-  
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
+  /* fade-in can be replaced with Tailwind: animate-in fade-in slide-in-from-bottom-2 */
+  /* fade-in-delay can be replaced with: animate-in fade-in slide-in-from-bottom-2 delay-100 */
   
   /* Subtle pulse for attention */
   .pulse-subtle {
@@ -310,25 +225,14 @@
     }
   }
   
-  /* Smooth scale on interaction */
-  .interactive-scale {
-    @apply transition-transform duration-200 ease-out;
-  }
-  
-  .interactive-scale:active {
-    transform: scale(0.98);
-  }
+  /* interactive-scale can be replaced with: transition-transform duration-200 ease-out active:scale-[0.98] */
   
   /* Elegant border gradient */
   .border-gradient {
     border-image: linear-gradient(135deg, hsl(var(--primary) / 0.3), hsl(var(--primary) / 0.1)) 1;
   }
   
-  /* Reading-friendly line height */
-  .reading-prose {
-    @apply leading-relaxed;
-    line-height: 1.75;
-  }
+  /* reading-prose can be replaced with: leading-relaxed (or use prose classes) */
   
   /* Subtle background pattern */
   .pattern-dots {
@@ -718,7 +622,7 @@
 /* But allow theme background to be set via inline styles */
 #react-reader[style*="background"],
 [class*="react-reader"][style*="background"] {
-  background-color: var(--reading-bg-light, transparent) !important;
+  background-color: var(--c-canvas, var(--background), transparent) !important;
 }
 
 /* Custom EPUB reader variables */

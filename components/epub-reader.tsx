@@ -82,24 +82,24 @@ export function EpubReader({
       const style = doc.createElement("style")
       style.id = "epub-theme-override"
       
-      // Get CSS variables from parent document
+      // Get CSS variables from parent document - use general theme colors
       const root = document.documentElement
-      const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
-      const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+      const bg = getComputedStyle(root).getPropertyValue("--c-canvas").trim() || getComputedStyle(root).getPropertyValue("--background").trim() || "#ffffff"
+      const fg = getComputedStyle(root).getPropertyValue("--c-ink").trim() || getComputedStyle(root).getPropertyValue("--foreground").trim() || "#111"
       
       style.textContent = `
         html, body {
-          background: var(--reader-paper, ${bg}) !important;
-          color: var(--reader-fg, ${fg}) !important;
+          background: var(--c-canvas, var(--background, ${bg})) !important;
+          color: var(--c-ink, var(--foreground, ${fg})) !important;
         }
         body * {
-          color: var(--reader-fg, ${fg}) !important;
+          color: var(--c-ink, var(--foreground, ${fg})) !important;
         }
         ::selection {
-          background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+          background: color-mix(in srgb, var(--c-ink, var(--foreground, ${fg})) 20%, transparent) !important;
         }
         div, section, article, p {
-          background: var(--reader-paper, ${bg}) !important;
+          background: var(--c-canvas, var(--background, ${bg})) !important;
         }
       `
       doc.head.appendChild(style)
@@ -117,8 +117,8 @@ export function EpubReader({
         "font-family": `"${fontFamily}", serif !important`,
         "font-size": `${fontSize}px !important`,
         "line-height": `${lineHeight} !important`,
-        "background-color": "var(--reader-paper) !important",
-        "color": "var(--reader-fg) !important",
+        "background-color": "var(--c-canvas, var(--background)) !important",
+        "color": "var(--c-ink, var(--foreground)) !important",
       },
       "*": {
         "font-family": `"${fontFamily}", serif !important`,
@@ -130,8 +130,8 @@ export function EpubReader({
         "font-family": `"${fontFamily}", serif !important`,
         "font-size": `${fontSize}px !important`,
         "line-height": `${lineHeight} !important`,
-        "background-color": "var(--reader-paper) !important",
-        "color": "var(--reader-fg) !important",
+        "background-color": "var(--c-canvas, var(--background)) !important",
+        "color": "var(--c-ink, var(--foreground)) !important",
       },
       "*": {
         "font-family": `"${fontFamily}", serif !important`,
@@ -143,8 +143,8 @@ export function EpubReader({
         "font-family": `"${fontFamily}", serif !important`,
         "font-size": `${fontSize}px !important`,
         "line-height": `${lineHeight} !important`,
-        "background-color": "var(--reader-paper) !important",
-        "color": "var(--reader-fg) !important",
+        "background-color": "var(--c-canvas, var(--background)) !important",
+        "color": "var(--c-ink, var(--foreground)) !important",
       },
       "*": {
         "font-family": `"${fontFamily}", serif !important`,
@@ -883,10 +883,10 @@ export function EpubReader({
     return () => clearTimeout(timeout)
   }, [url, loading, rendition])
 
-  // Get CSS variables for background
+  // Get CSS variables for background - use general theme colors
   const root = typeof document !== 'undefined' ? document.documentElement : null
-  const bg = root ? getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff" : "#ffffff"
-  const fg = root ? getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111" : "#111"
+  const bg = root ? getComputedStyle(root).getPropertyValue("--c-canvas").trim() || getComputedStyle(root).getPropertyValue("--background").trim() || "#ffffff" : "#ffffff"
+  const fg = root ? getComputedStyle(root).getPropertyValue("--c-ink").trim() || getComputedStyle(root).getPropertyValue("--foreground").trim() || "#111" : "#111"
   
   return (
     <div 
@@ -894,8 +894,8 @@ export function EpubReader({
       className="w-full h-full" 
       style={{ 
         position: "relative",
-        backgroundColor: `var(--reader-paper, ${bg})`,
-        color: `var(--reader-fg, ${fg})`,
+        backgroundColor: `var(--c-canvas, var(--background, ${bg}))`,
+        color: `var(--c-ink, var(--foreground, ${fg}))`,
       }}
     >
       {loading && (

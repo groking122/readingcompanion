@@ -17,7 +17,6 @@ import { ReadingProgressIndicator } from "@/components/reading-progress-indicato
 import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overlay"
 import { ReaderErrorBoundary } from "@/components/reader-error-boundary"
 import { ReaderThemeSync } from "@/components/reader-theme-sync"
-import { getCurrentThemeIndex, isBlackWhiteActive } from "@/lib/theme-controller"
 import { toast } from "@/lib/toast"
 import { useIsMobile } from "@/lib/hooks/use-media-query"
 import { createFingerprint, getCachedLocations, saveCachedLocations, type LayoutFingerprint } from "@/lib/epub-locations-cache"
@@ -158,15 +157,6 @@ function SearchHighlight({ searchTerm }: { searchTerm: string }) {
 // Helper functions for reader settings
 const getBookSettingsKey = (bookId: string) => `reader_settings_${bookId}`
 
-const getReaderSurfaceTheme = (): "light" | "sepia" | "dark" | "paper" => {
-  if (typeof window === "undefined") return "light"
-  
-  // Check global theme - Jet Black (index 4) = dark, others = light
-  if (isBlackWhiteActive()) return "light"
-  const currentIndex = getCurrentThemeIndex()
-  return currentIndex === 4 ? "dark" : "light"
-}
-
 const loadBookSettings = (bookId: string) => {
   try {
     const saved = localStorage.getItem(getBookSettingsKey(bookId))
@@ -178,7 +168,6 @@ const loadBookSettings = (bookId: string) => {
         lineHeight: settings.lineHeight || 1.6,
         readingWidth: settings.readingWidth || "comfort",
         paragraphSpacing: settings.paragraphSpacing || 1.5,
-        theme: settings.theme || getReaderSurfaceTheme(),
         distractionFree: settings.distractionFree || false,
       }
     }
@@ -191,7 +180,6 @@ const loadBookSettings = (bookId: string) => {
     lineHeight: 1.6,
     readingWidth: "comfort" as const,
     paragraphSpacing: 1.5,
-    theme: getReaderSurfaceTheme(),
     distractionFree: false,
   }
 }
@@ -202,7 +190,6 @@ const saveBookSettings = (bookId: string, settings: {
   lineHeight: number
   readingWidth: "comfort" | "wide"
   paragraphSpacing: number
-  theme: "light" | "sepia" | "dark" | "paper"
   distractionFree: boolean
 }) => {
   try {
@@ -256,33 +243,6 @@ export default function ReaderPage() {
   const [lineHeight, setLineHeight] = useState(1.6)
   const [readingWidth, setReadingWidth] = useState<"comfort" | "wide">("comfort") // Reading width preset
   const [paragraphSpacing, setParagraphSpacing] = useState(1.5) // rem
-  // Derive initial theme from global theme
-  const [theme, setTheme] = useState<"light" | "sepia" | "dark" | "paper">(() => {
-    if (typeof window === "undefined") return "light"
-    if (isBlackWhiteActive()) return "light"
-    const currentIndex = getCurrentThemeIndex()
-    return currentIndex === 4 ? "dark" : "light"
-  })
-  
-  // Sync theme to global theme changes
-  useEffect(() => {
-    const handleThemeChange = () => {
-      if (isBlackWhiteActive()) {
-        setTheme("light")
-      } else {
-        const currentIndex = getCurrentThemeIndex()
-        setTheme(currentIndex === 4 ? "dark" : "light")
-      }
-    }
-    
-    window.addEventListener('theme-change', handleThemeChange)
-    window.addEventListener('storage', handleThemeChange)
-    
-    return () => {
-      window.removeEventListener('theme-change', handleThemeChange)
-      window.removeEventListener('storage', handleThemeChange)
-    }
-  }, [])
   const [distractionFree, setDistractionFree] = useState(false)
   const [location, setLocation] = useState<string | number>(0)
   const [epubUrl, setEpubUrl] = useState<string | null>(null)
@@ -1066,12 +1026,11 @@ export default function ReaderPage() {
       setLineHeight(settings.lineHeight)
       setReadingWidth(settings.readingWidth)
       setParagraphSpacing(settings.paragraphSpacing)
-      setTheme(settings.theme)
       setDistractionFree(settings.distractionFree)
     }
   }, [book?.id])
 
-  // Save book settings when they change (excluding theme - it's synced to global)
+  // Save book settings when they change
   useEffect(() => {
     if (book?.id) {
       saveBookSettings(book.id, {
@@ -1080,11 +1039,10 @@ export default function ReaderPage() {
         lineHeight,
         readingWidth,
         paragraphSpacing,
-        theme, // Still save current theme for reading surface
         distractionFree,
       })
     }
-  }, [book?.id, fontSize, fontFamily, lineHeight, readingWidth, paragraphSpacing, theme, distractionFree])
+  }, [book?.id, fontSize, fontFamily, lineHeight, readingWidth, paragraphSpacing, distractionFree])
 
   // Measure container dimensions for layout fingerprint
   useEffect(() => {
@@ -1711,9 +1669,9 @@ export default function ReaderPage() {
     ? { maxWidth: "85ch", width: "100%" }
     : { maxWidth: "100ch", width: "100%" }
 
-  // Get theme colors - unified across entire page
-  const themeBgColor = theme === "dark" ? "#1a1a1a" : theme === "sepia" ? "#f4ecd8" : theme === "paper" ? "#faf8f3" : "white"
-  const themeTextColor = theme === "dark" ? "#e0e0e0" : "#292B30"
+  // Use general site theme colors via CSS variables
+  const themeBgColor = "var(--c-canvas)"
+  const themeTextColor = "var(--c-ink)"
 
   // Early returns
 
@@ -1736,7 +1694,6 @@ export default function ReaderPage() {
   return (
     <div 
       className="reader-root theme-surface min-h-screen"
-      data-reader-theme={theme}
       style={{
         backgroundColor: themeBgColor,
         color: themeTextColor,
@@ -1771,8 +1728,6 @@ export default function ReaderPage() {
         fontFamily={fontFamily}
         lineHeight={lineHeight}
         readingWidth={readingWidth}
-        theme={theme}
-        onThemeChange={setTheme}
         paragraphSpacing={paragraphSpacing}
         onParagraphSpacingChange={setParagraphSpacing}
         isOpen={settingsOpen}
@@ -1856,7 +1811,7 @@ export default function ReaderPage() {
             <div 
               className="reader-paper-surface"
               style={{
-                backgroundColor: "var(--reader-paper)",
+                backgroundColor: "var(--c-canvas, var(--background))",
                 maxWidth: readingWidth === "comfort" ? "85ch" : "100ch",
                 margin: "0 auto",
               }}
@@ -1868,14 +1823,13 @@ export default function ReaderPage() {
                   minHeight: "800px", 
                   position: "relative", 
                   width: "100%",
-                  backgroundColor: "var(--reader-paper)",
+                  backgroundColor: "var(--c-canvas, var(--background))",
                 }}
               >
                 <EpubReader
                 key={bookId} // Only remount when book changes, not settings
                 url={epubUrl}
                 location={location}
-                theme={theme}
                 knownWords={knownWords}
                 vocabularyWords={vocabularyWords}
                 hasKnownWordsData={hasKnownWordsData}

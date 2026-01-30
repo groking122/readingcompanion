@@ -37,13 +37,13 @@ export function ThemeToggle() {
       onClick={handleToggle}
       className={cn(
         "h-9 w-9 rounded-lg",
-        "border border-white/20",
-        "bg-white/5",
-        "text-white",
+        "border border-border/20",
+        "bg-background/5",
+        "text-foreground",
         "flex items-center justify-center",
         "transition-all duration-200 ease-out",
-        "hover:bg-white/10 hover:border-white/30",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+        "hover:bg-foreground/10 hover:border-border/30",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "active:scale-90",
         "backdrop-blur-sm"
       )}

@@ -2,7 +2,7 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Type, Plus, Minus, Layout, Palette } from "lucide-react"
+import { Type, Plus, Minus, Layout } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -15,8 +15,6 @@ interface ReaderSettingsProps {
   fontFamily: string
   lineHeight: number
   readingWidth?: "comfort" | "wide"
-  theme?: "light" | "sepia" | "dark" | "paper"
-  onThemeChange?: (theme: "light" | "sepia" | "dark" | "paper") => void
   paragraphSpacing?: number
   onParagraphSpacingChange?: (spacing: number) => void
   isOpen: boolean
@@ -27,48 +25,11 @@ interface ReaderSettingsProps {
   onReadingWidthChange?: (width: "comfort" | "wide") => void
 }
 
-const PRESETS = {
-  comfort: {
-    fontSize: 18,
-    fontFamily: "Inter",
-    lineHeight: 1.7,
-    readingWidth: "comfort" as const,
-    theme: "light" as const,
-  },
-  paper: {
-    fontSize: 16,
-    fontFamily: "Georgia",
-    lineHeight: 1.6,
-    readingWidth: "comfort" as const,
-    theme: "paper" as const,
-  },
-  night: {
-    fontSize: 16,
-    fontFamily: "Inter",
-    lineHeight: 1.6,
-    readingWidth: "comfort" as const,
-    theme: "dark" as const,
-  },
-  dense: {
-    fontSize: 14,
-    fontFamily: "Inter",
-    lineHeight: 1.4,
-    readingWidth: "wide" as const,
-    theme: "light" as const,
-  },
-}
-
-const DEFAULT_FONT_SIZE = 16
-const DEFAULT_FONT_FAMILY = "Inter"
-const DEFAULT_LINE_HEIGHT = 1.6
-
 export function ReaderSettings({
   fontSize,
   fontFamily,
   lineHeight,
   readingWidth = "comfort",
-  theme = "light",
-  onThemeChange,
   paragraphSpacing = 1.5,
   onParagraphSpacingChange,
   isOpen,
@@ -79,15 +40,6 @@ export function ReaderSettings({
   onReadingWidthChange,
 }: ReaderSettingsProps) {
   const isMobile = useIsMobile()
-
-  const applyPreset = (presetName: keyof typeof PRESETS) => {
-    const preset = PRESETS[presetName]
-    onFontSizeChange(preset.fontSize)
-    onFontFamilyChange(preset.fontFamily)
-    onLineHeightChange(preset.lineHeight)
-    onReadingWidthChange?.(preset.readingWidth)
-    onThemeChange?.(preset.theme)
-  }
 
   const increaseFontSize = () => {
     onFontSizeChange(Math.min(fontSize + 1, 24))
@@ -100,25 +52,6 @@ export function ReaderSettings({
   // Render settings content (used in both mobile and desktop views)
   const renderSettingsContent = () => (
     <div className="space-y-5">
-      {/* Presets */}
-      <div>
-        <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Presets</div>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(PRESETS).map(([name, preset]) => (
-            <button
-              key={name}
-              onClick={() => applyPreset(name as keyof typeof PRESETS)}
-              className="p-3 rounded-md border hover:border-primary transition-colors text-left"
-            >
-              <div className="text-sm font-medium capitalize">{name}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {preset.fontSize}px • {preset.fontFamily}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Typography */}
       <div>
         <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide flex items-center gap-1.5">
@@ -265,30 +198,6 @@ export function ReaderSettings({
           )}
         </div>
       </div>
-
-      {/* Theme */}
-      {onThemeChange && (
-        <div>
-          <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide flex items-center gap-1.5">
-            <Palette className="h-3 w-3" />
-            Theme
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {(["light", "sepia", "dark", "paper"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => onThemeChange(t)}
-                className={cn(
-                  "h-8 rounded-md border text-xs font-medium transition-colors",
-                  theme === t ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
-                )}
-              >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 
