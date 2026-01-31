@@ -11,15 +11,18 @@ import { EpubReader } from "@/components/epub-reader"
 import { TocDrawer, type TocItem } from "@/components/toc-drawer"
 import { TranslationDrawer } from "@/components/translation-drawer"
 import { TranslationPopover } from "@/components/translation-popover"
+import { SessionSummaryModal } from "@/components/session-summary-modal"
 import { BookmarksDrawer, type BookmarkItem } from "@/components/bookmarks-drawer"
 import { ReaderTopBar } from "@/components/reader-top-bar"
 import { ReadingProgressIndicator } from "@/components/reading-progress-indicator"
 import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overlay"
 import { ReaderErrorBoundary } from "@/components/reader-error-boundary"
 import { ReaderThemeSync } from "@/components/reader-theme-sync"
+import { ReaderNavigation } from "@/components/reader-navigation"
 import { toast } from "@/lib/toast"
 import { useIsMobile } from "@/lib/hooks/use-media-query"
 import { createFingerprint, getCachedLocations, saveCachedLocations, type LayoutFingerprint } from "@/lib/epub-locations-cache"
+import { getCachedTranslation, cacheTranslation } from "@/lib/translation-cache"
 
 // Helper function to mark vocabulary words in text
 function markUnknownWords(text: string, knownWords: Set<string>, vocabularyWords: Set<string>, hasKnownWords: boolean): React.ReactNode[] {
@@ -237,13 +240,14 @@ export default function ReaderPage() {
   // Mobile detection using media queries (pointer:coarse + max-width)
   const isMobile = useIsMobile()
   const [saving, setSaving] = useState(false)
+  const translationAbortControllerRef = useRef<AbortController | null>(null)
 
   const [fontSize, setFontSize] = useState(16)
   const [fontFamily, setFontFamily] = useState("Inter")
   const [lineHeight, setLineHeight] = useState(1.6)
   const [readingWidth, setReadingWidth] = useState<"comfort" | "wide">("comfort") // Reading width preset
   const [paragraphSpacing, setParagraphSpacing] = useState(1.5) // rem
-  const [distractionFree, setDistractionFree] = useState(false)
+  const [distractionFree, setDistractionFree] = useState(true) // Default to distraction-free
   const [location, setLocation] = useState<string | number>(0)
   const [epubUrl, setEpubUrl] = useState<string | null>(null)
   const [epubError, setEpubError] = useState<string | null>(null)
@@ -268,6 +272,14 @@ export default function ReaderPage() {
   const [knownWords, setKnownWords] = useState<Set<string>>(new Set())
   const [vocabularyWords, setVocabularyWords] = useState<Set<string>>(new Set()) // Words saved to vocabulary (not marked as known)
   const [hasKnownWordsData, setHasKnownWordsData] = useState(false)
+  const [focusMode, setFocusMode] = useState<"chrome" | "content">("content")
+  
+  // Session tracking
+  const [sessionStartPage, setSessionStartPage] = useState<number | null>(null)
+  const [sessionWordsFound, setSessionWordsFound] = useState(0)
+  const [sessionWordsSaved, setSessionWordsSaved] = useState(0)
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null)
+  const [showSessionSummary, setShowSessionSummary] = useState(false)
   const bookContentRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const epubContainerRef = useRef<HTMLDivElement | null>(null) // Container for EPUB reader
@@ -570,6 +582,42 @@ export default function ReaderPage() {
     }
   }, [book, currentPage, readingProgress])
 
+  // Helper function to save progress using sendBeacon (reliable on tab close)
+  const saveProgressWithBeacon = useCallback(() => {
+    if (!book) return
+    
+    const bookmarkData: any = {
+      bookId: book.id,
+      progressPercentage: Math.round(readingProgress),
+    }
+
+    if (book.type === "epub" && currentLocation !== null) {
+      if (typeof currentLocation === "string" && currentLocation.length > 0) {
+        bookmarkData.epubLocation = currentLocation
+      }
+      if (currentPage !== null && currentPage > 0) {
+        bookmarkData.pageNumber = currentPage
+      }
+    } else if (book.type === "pdf" && currentPage !== null && currentPage > 0) {
+      bookmarkData.pageNumber = currentPage
+    } else if (book.type === "text" && currentPage !== null && currentPage > 0) {
+      bookmarkData.pageNumber = currentPage
+      // Also include position if available
+      if (typeof currentLocation === "number" && currentLocation > 0) {
+        bookmarkData.position = currentLocation
+      }
+    }
+
+    // Only save if we have at least one location identifier and valid progress
+    if ((bookmarkData.epubLocation || bookmarkData.pageNumber || bookmarkData.position) && readingProgress > 0) {
+      // Use sendBeacon for reliable delivery on tab close
+      const blob = new Blob([JSON.stringify(bookmarkData)], {
+        type: "application/json",
+      })
+      navigator.sendBeacon("/api/bookmarks/last-read", blob)
+    }
+  }, [book, currentLocation, readingProgress, currentPage])
+
   // Save progress on unmount
   useEffect(() => {
     return () => {
@@ -586,7 +634,28 @@ export default function ReaderPage() {
         autoSaveProgress(currentPage, estimatedProgress)
       }
     }
-  }, [book, currentLocation, readingProgress, currentPage])
+  }, [book, currentLocation, readingProgress, currentPage, autoSaveProgress])
+
+  // Save progress on beforeunload and visibilitychange (reliable on tab close)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveProgressWithBeacon()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        saveProgressWithBeacon()
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [saveProgressWithBeacon])
 
   // Mobile detection is now handled by useIsMobile hook
 
@@ -606,6 +675,73 @@ export default function ReaderPage() {
   const isPhrase = (text: string): boolean => {
     const wordCount = countWords(text)
     return wordCount >= 2 && wordCount <= 6
+  }
+
+  // Helper function to extract full sentence from text
+  const extractSentenceFromText = (text: string, wordIndex: number): string => {
+    if (!text || wordIndex < 0 || wordIndex >= text.length) {
+      return text
+    }
+
+    // Find sentence boundaries
+    const sentenceEndRegex = /[.!?]\s+/g
+    
+    // Find the start of the sentence
+    let sentenceStart = 0
+    let lastMatch: RegExpExecArray | null = null
+    let match: RegExpExecArray | null
+    
+    sentenceEndRegex.lastIndex = 0
+    
+    while ((match = sentenceEndRegex.exec(text)) !== null) {
+      if (match.index < wordIndex) {
+        lastMatch = match
+        sentenceStart = match.index + match[0].length
+      } else {
+        break
+      }
+    }
+    
+    // If no sentence end found before word, try to find start by looking backwards
+    if (sentenceStart === 0 && lastMatch === null) {
+      for (let i = wordIndex; i >= 0; i--) {
+        if (/[.!?]\s+/.test(text.substring(Math.max(0, i - 1), i + 2))) {
+          sentenceStart = i + 2
+          break
+        }
+      }
+    }
+    
+    // Find the end of the sentence
+    let sentenceEnd = text.length
+    sentenceEndRegex.lastIndex = wordIndex
+    
+    const endMatch = sentenceEndRegex.exec(text)
+    if (endMatch) {
+      sentenceEnd = endMatch.index + endMatch[0].length - 1
+    } else {
+      // Look for sentence-ending punctuation after the word
+      for (let i = wordIndex; i < text.length; i++) {
+        if (/[.!?]/.test(text[i])) {
+          if (i === text.length - 1 || /\s/.test(text[i + 1])) {
+            sentenceEnd = i + 1
+            break
+          }
+        }
+      }
+    }
+    
+    // Extract the sentence
+    const sentence = text.substring(sentenceStart, sentenceEnd).trim()
+    
+    // Fallback: if sentence is too short, return larger context
+    if (sentence.length < 10) {
+      const contextStart = Math.max(0, wordIndex - 100)
+      const contextEnd = Math.min(text.length, wordIndex + 100)
+      return text.substring(contextStart, contextEnd).trim()
+    }
+    
+    return sentence
   }
 
   const handleSaveWord = useCallback(async () => {
@@ -797,6 +933,32 @@ export default function ReaderPage() {
   // Keyboard shortcuts handler
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+F or Cmd+F: Toggle focus between Chrome and Content
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault()
+        if (focusMode === "chrome") {
+          // Focus content (EPUB iframe)
+          const iframe = document.querySelector("iframe")
+          if (iframe?.contentWindow) {
+            try {
+              iframe.contentWindow.focus()
+              setFocusMode("content")
+            } catch (err) {
+              console.debug("Cannot focus iframe:", err)
+            }
+          }
+        } else {
+          // Focus chrome (top bar)
+          const topBar = document.querySelector('[class*="reader-top-bar"]')
+          if (topBar) {
+            const firstButton = topBar.querySelector("button")
+            firstButton?.focus()
+            setFocusMode("chrome")
+          }
+        }
+        return
+      }
+
       // Don't intercept if user is typing in an input/textarea/contenteditable
       const target = e.target as HTMLElement
       if (
@@ -1008,6 +1170,9 @@ export default function ReaderPage() {
   useEffect(() => {
     fetchBook()
     
+    // Initialize session tracking
+    setSessionStartTime(Date.now())
+    
     // Cleanup blob URL on unmount
     return () => {
       if (epubUrl && epubUrl.startsWith("blob:")) {
@@ -1016,6 +1181,46 @@ export default function ReaderPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId])
+
+  // Track session start page
+  useEffect(() => {
+    if (currentPage !== null && sessionStartPage === null) {
+      setSessionStartPage(currentPage)
+    }
+  }, [currentPage, sessionStartPage])
+
+  // Track words found (when translation is shown)
+  useEffect(() => {
+    if (selectedText && translation) {
+      setSessionWordsFound((prev) => prev + 1)
+    }
+  }, [selectedText, translation])
+
+  // Track words saved
+  useEffect(() => {
+    if (savedWordId) {
+      setSessionWordsSaved((prev) => prev + 1)
+    }
+  }, [savedWordId])
+
+  // Calculate pages read this session
+  const pagesRead = sessionStartPage !== null && currentPage !== null
+    ? Math.max(0, currentPage - sessionStartPage)
+    : 0
+
+  // Calculate reading time
+  const readingTimeMinutes = sessionStartTime !== null
+    ? Math.floor((Date.now() - sessionStartTime) / 60000)
+    : undefined
+
+  // Handle back button - show session summary if there's activity
+  const handleBack = () => {
+    if (pagesRead > 0 || sessionWordsFound > 0 || sessionWordsSaved > 0) {
+      setShowSessionSummary(true)
+    } else {
+      router.back()
+    }
+  }
 
   // Load book settings when book changes
   useEffect(() => {
@@ -1434,6 +1639,26 @@ export default function ReaderPage() {
   }
 
   const handleTextSelection = async (text: string, cfiRange?: string, context?: string) => {
+    // Cancel previous translation request if any
+    if (translationAbortControllerRef.current) {
+      translationAbortControllerRef.current.abort()
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController()
+    translationAbortControllerRef.current = abortController
+
+    // Clear previous translation immediately to prevent stale data
+    setTranslation("")
+    setAlternativeTranslations([])
+    // On mobile, open drawer immediately with skeleton loader (one-tap)
+    // On desktop, wait for translation before opening
+    if (isMobile) {
+      setPopoverOpen(true)
+    } else {
+      setPopoverOpen(false)
+    }
+
     // For EPUB, text is passed directly from the rendition
     // For non-EPUB, use window selection
     let selectedText = text
@@ -1452,13 +1677,14 @@ export default function ReaderPage() {
         const range = selection.getRangeAt(0)
         selectionRect = range.getBoundingClientRect()
         
-        // Get context from selection
+        // Get context from selection - extract full sentence
         const container = range.commonAncestorContainer
         if (container.parentElement) {
-          contextText = container.parentElement.textContent?.substring(
-            Math.max(0, range.startOffset - 100),
-            Math.min(container.parentElement.textContent.length, range.endOffset + 100)
-          ) || selectedText
+          const parentText = container.parentElement.textContent || ""
+          const wordIndex = range.startOffset
+          
+          // Extract full sentence containing the selected word
+          contextText = extractSentenceFromText(parentText, wordIndex) || selectedText
         }
       }
     } else if (book?.type === "epub" && context) {
@@ -1538,20 +1764,65 @@ export default function ReaderPage() {
     }
 
     try {
+      // Check cache first
+      const cached = getCachedTranslation(selectedText)
+      if (cached) {
+        // Use cached translation immediately
+        setTranslation(cached.translation)
+        setAlternativeTranslations(cached.alternativeTranslations || [])
+        setTranslating(false)
+        // Open popover/drawer if not already open (mobile opens immediately)
+        if (!popoverOpen) {
+          setPopoverOpen(true)
+        }
+        return
+      }
+
+      // Fetch from API if not cached
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: selectedText }),
+        signal: abortController.signal, // Add abort signal
       })
+
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return
+      }
+
       const data = await res.json()
+      
+      // Double-check abort status before updating state
+      if (abortController.signal.aborted) {
+        return
+      }
+
+      // Cache the translation
+      cacheTranslation(
+        selectedText,
+        data.translatedText,
+        data.alternativeTranslations || []
+      )
+
       setTranslation(data.translatedText)
       setAlternativeTranslations(data.alternativeTranslations || [])
-      setPopoverOpen(true)
-    } catch (error) {
+      // Open popover/drawer if not already open (mobile opens immediately)
+      if (!popoverOpen) {
+        setPopoverOpen(true)
+      }
+    } catch (error: any) {
+      // Ignore abort errors (request was cancelled intentionally)
+      if (error.name === "AbortError") {
+        return
+      }
       console.error("Translation error:", error)
       setTranslation("Translation failed")
     } finally {
-      setTranslating(false)
+      // Only set translating to false if request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setTranslating(false)
+      }
     }
   }
 
@@ -1705,7 +1976,8 @@ export default function ReaderPage() {
       
       {/* Minimal top bar with auto-hide */}
       {!distractionFree && (
-        <ReaderTopBar
+        <div className="reader-ui-chrome">
+          <ReaderTopBar
           bookTitle={book.title}
           bookType={book.type as "epub" | "pdf" | "text"}
           distractionFree={distractionFree}
@@ -1719,8 +1991,26 @@ export default function ReaderPage() {
           onBookmarksClick={() => setBookmarksOpen(true)}
           onAddBookmark={handleAddBookmark}
           onDistractionFreeChange={setDistractionFree}
+          onBack={handleBack}
         />
+        </div>
       )}
+
+      {/* Session Summary Modal */}
+      <SessionSummaryModal
+        isOpen={showSessionSummary}
+        onClose={() => {
+          setShowSessionSummary(false)
+          router.back()
+        }}
+        pagesRead={pagesRead}
+        wordsFound={sessionWordsFound}
+        wordsSaved={sessionWordsSaved}
+        readingTimeMinutes={readingTimeMinutes}
+        onReviewClick={() => {
+          setShowSessionSummary(false)
+        }}
+      />
 
       {/* Settings Drawer */}
       <ReaderSettings
@@ -2051,6 +2341,32 @@ export default function ReaderPage() {
               />
               </div>
               
+              {/* Navigation Controls */}
+              {renditionRef.current && (
+                <ReaderNavigation
+                  rendition={renditionRef.current}
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  progress={readingProgress}
+                  onPageChange={(page) => {
+                    // Navigate to page using CFI if available
+                    if (bookRef.current?.locations && renditionRef.current) {
+                      try {
+                        const percentage = (page - 1) / (totalPages || 1)
+                        const cfi = bookRef.current.locations.cfiFromPercentage(percentage)
+                        if (cfi) {
+                          renditionRef.current.display(cfi)
+                          setCurrentPage(page)
+                        }
+                      } catch (err) {
+                        console.debug("Error navigating to page:", err)
+                      }
+                    }
+                  }}
+                  disabled={!renditionRef.current || !bookRef.current}
+                />
+              )}
+              
               {/* TOC Drawer */}
               <TocDrawer
                 toc={toc}
@@ -2377,17 +2693,16 @@ export default function ReaderPage() {
           />
         )}
 
-        {/* Bottom Status Pill - Calm progress indicator */}
-        {!distractionFree && (
-          <ReadingProgressIndicator
-            progress={readingProgress}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            currentChapter={currentChapter}
-            bookType={book.type as "epub" | "pdf" | "text"}
-            onTocClick={book.type === "epub" ? () => setTocOpen(true) : undefined}
-          />
-        )}
+        {/* Bottom Status - Thin progress line in distraction-free, full indicator otherwise */}
+        <ReadingProgressIndicator
+          progress={readingProgress}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          currentChapter={currentChapter}
+          bookType={book.type as "epub" | "pdf" | "text"}
+          onTocClick={book.type === "epub" ? () => setTocOpen(true) : undefined}
+          minimal={distractionFree}
+        />
       </div>
     </div>
   )

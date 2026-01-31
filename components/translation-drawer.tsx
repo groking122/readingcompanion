@@ -77,7 +77,7 @@ export function TranslationDrawer({
       {/* Drawer - Bottom sheet for mobile only */}
       <div
         className={cn(
-          "theme-surface fixed bg-background shadow-xl",
+          "theme-surface fixed bg-background shadow-xl translation-drawer",
           // Mobile: bottom drawer (only visible on mobile)
           "bottom-0 left-0 right-0 max-h-[85vh] rounded-t-lg border-t",
           // Transform states
@@ -87,6 +87,14 @@ export function TranslationDrawer({
         style={{ 
           zIndex: 101,
           transition: reducedMotion ? "none" : "transform 300ms ease-in-out",
+        }}
+        onTouchStart={(e) => {
+          // Prevent native selection menu on touch
+          e.stopPropagation()
+        }}
+        onTouchEnd={(e) => {
+          // Prevent native selection menu on touch
+          e.stopPropagation()
         }}
       >
         <div className="flex flex-col h-full max-h-[85vh]">

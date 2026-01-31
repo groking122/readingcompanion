@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ensure rem-based scaling supports 200% zoom */
+html {
+  font-size: 16px; /* Base font size */
+}
+
+/* Support up to 200% zoom without breaking layout */
+@media (min-resolution: 2dppx) {
+  html {
+    font-size: 16px; /* Maintain base size */
+  }
+}
+
 @layer base {
   :root {
     /* Fixed Color Palette - 8 Colors (Theme 1: Lavender Storm) */
@@ -619,10 +631,10 @@
   background-color: transparent !important;
 }
 
-/* But allow theme background to be set via inline styles */
+/* Force transparent backgrounds everywhere for seamless theme */
 #react-reader[style*="background"],
 [class*="react-reader"][style*="background"] {
-  background-color: var(--c-canvas, var(--background), transparent) !important;
+  background-color: transparent !important;
 }
 
 /* Custom EPUB reader variables */
@@ -904,6 +916,26 @@ button[title*="Toggle theme"] {
   transition: all 0.3s ease;
 }
 
+/* Prevent native selection on UI chrome elements */
+.reader-ui-chrome,
+.reader-ui-chrome * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Translation drawer touch handling */
+.translation-drawer {
+  touch-action: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.translation-drawer * {
+  touch-action: auto;
+}
+
 /* Word selection improvements */
 .epub-word {
   transition: background-color 0.15s ease, transform 0.1s ease;
@@ -934,14 +966,14 @@ button[title*="Toggle theme"] {
   background-color: hsl(var(--background));
 }
 
-/* Unknown word highlighting for text content - very subtle, invisible by default */
+/* Unknown word highlighting for text content - background highlight with mix-blend-mode */
 .unknown-word-text {
-  /* Very subtle highlight - only visible on close inspection */
-  background-color: rgba(147, 51, 234, 0.12);
-  border-bottom: 1px solid rgba(147, 51, 234, 0.25);
-  padding-bottom: 1px;
-  transition: background-color 0.2s ease;
+  /* Background highlight with mix-blend-mode for better legibility */
+  background-color: rgba(147, 51, 234, 0.15);
+  mix-blend-mode: multiply;
   border-radius: 2px;
+  padding: 1px 2px;
+  transition: background-color 0.2s ease;
 }
 
 /* Only show cursor and stronger hover on desktop (not touch devices) */

@@ -46,12 +46,19 @@ export function TranslationContent({
     setSelectedTranslation(translation)
   }, [translation])
 
+  // Auto-expand context when word is saved (Keep mode)
+  useEffect(() => {
+    if (savedWordId && context) {
+      setShowContext(true)
+    }
+  }, [savedWordId, context])
+
   return (
     <div className={cn("flex flex-col", compact ? "w-full" : "w-full")}>
       {/* Content */}
       <ScrollArea className={cn("flex-1", compact ? "max-h-[60vh]" : "max-h-[85vh] md:max-h-full")}>
         <div className={cn("space-y-4", compact ? "p-3" : "p-4")}>
-          {/* Translation - BIG and FIRST (Duolingo/Kobo style) */}
+          {/* Translation - BIG and FIRST (Peek vs Keep UI) */}
           <div>
             {translating ? (
               <div className="flex items-center gap-2 py-2">
@@ -60,13 +67,13 @@ export function TranslationContent({
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Main translation - prominent (shows selected translation) */}
+                {/* Main translation - prominent (Peek: instant brief definition) */}
                 <div>
                   <p className={cn(
                     "break-words font-medium",
                     compact ? "text-lg" : "text-xl"
                   )}>
-                    {selectedTranslation}
+                    {selectedTranslation || "Translation unavailable"}
                   </p>
                 </div>
 
@@ -78,14 +85,14 @@ export function TranslationContent({
                   <p className="text-sm break-words text-muted-foreground">{selectedText}</p>
                 </div>
 
-                {/* Context - collapsible */}
+                {/* Context - collapsible, expanded when saved (Keep mode) */}
                 {context && context !== selectedText && (
                   <div className="pt-2 border-t">
                     <button
                       onClick={() => setShowContext(!showContext)}
                       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-left"
                     >
-                      {showContext ? (
+                      {showContext || savedWordId ? (
                         <>
                           <ChevronUp className="h-3 w-3" />
                           <span>Hide sentence</span>
@@ -97,11 +104,28 @@ export function TranslationContent({
                         </>
                       )}
                     </button>
-                    {showContext && (
+                    {(showContext || savedWordId) && (
                       <p className="text-xs text-muted-foreground mt-2 italic leading-relaxed">
                         {context}
                       </p>
                     )}
+                  </div>
+                )}
+                
+                {/* Usage examples - shown when saved (Keep mode) */}
+                {savedWordId && alternativeTranslations.length > 0 && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Other meanings:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {alternativeTranslations.slice(0, 3).map((alt, idx) => (
+                        <span
+                          key={idx}
+                          className="text-xs px-2 py-1 rounded-md bg-muted/50 text-muted-foreground"
+                        >
+                          {alt}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -157,8 +181,9 @@ export function TranslationContent({
         </div>
       </ScrollArea>
 
-      {/* Footer Actions */}
+      {/* Footer Actions - Peek vs Keep UI */}
       <div className={cn("border-t space-y-2 shrink-0", compact ? "p-3" : "p-4")}>
+        {/* Keep: Prominent Save Button */}
         <div className="flex gap-2">
           <Button
             size={compact ? "default" : "lg"}
@@ -172,12 +197,28 @@ export function TranslationContent({
             }}
             disabled={saving || !translation || !!savedWordId}
             className={cn(
-              "flex-1",
-              compact ? "h-12 min-h-[48px]" : "h-12 min-h-[48px]"
+              "flex-1 font-semibold",
+              compact ? "h-14 min-h-[56px] text-base" : "h-14 min-h-[56px] text-lg",
+              savedWordId && "bg-green-600 hover:bg-green-700"
             )}
             type="button"
           >
-            {savedWordId ? "Saved ✓" : saving ? "Saving..." : isPhrase ? "Save Phrase" : "Save Word"}
+            {savedWordId ? (
+              <span className="flex items-center gap-2">
+                <span>✓</span>
+                <span>Saved!</span>
+              </span>
+            ) : saving ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Saving...</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span>+</span>
+                <span>{isPhrase ? "Save Phrase" : "Save Word"}</span>
+              </span>
+            )}
           </Button>
           {onMarkKnown && !savedWordId && (
             <Button

@@ -20,6 +20,7 @@ interface ReaderTopBarProps {
   onBookmarksClick: () => void
   onAddBookmark: () => void
   onDistractionFreeChange: (enabled: boolean) => void
+  onBack?: () => void
 }
 
 export function ReaderTopBar({
@@ -36,8 +37,17 @@ export function ReaderTopBar({
   onBookmarksClick,
   onAddBookmark,
   onDistractionFreeChange,
+  onBack,
 }: ReaderTopBarProps) {
   const router = useRouter()
+  
+  const handleBack = () => {
+    if (onBack) {
+      onBack()
+    } else {
+      router.back()
+    }
+  }
   const [isVisible, setIsVisible] = useState(true)
   const [lastScrollY, setLastScrollY] = useState(0)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -127,7 +137,7 @@ export function ReaderTopBar({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="h-8 w-8 p-0 shrink-0"
             aria-label="Back"
             title="Go back"

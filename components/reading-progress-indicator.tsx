@@ -16,6 +16,7 @@ interface ReadingProgressIndicatorProps {
   onTocClick?: () => void
   toc?: any[]
   bookType?: "epub" | "pdf" | "text"
+  minimal?: boolean // Show minimal thin line instead of full indicator
 }
 
 export function ReadingProgressIndicator({
@@ -26,12 +27,37 @@ export function ReadingProgressIndicator({
   className,
   onTocClick,
   bookType,
+  minimal = false,
 }: ReadingProgressIndicatorProps) {
   const [progressSheetOpen, setProgressSheetOpen] = useState(false)
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
 
-  if (progress <= 0 && !currentChapter) {
+  if (progress <= 0 && !currentChapter && !minimal) {
     return null
+  }
+
+  // Minimal mode: thin progress line at bottom
+  if (minimal) {
+    return (
+      <div
+        className={cn(
+          "fixed bottom-0 left-0 right-0 z-40 h-0.5",
+          className
+        )}
+        role="progressbar"
+        aria-valuenow={progress}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Reading progress: ${Math.round(progress)}%`}
+      >
+        <div
+          className="h-full bg-primary transition-all duration-300"
+          style={{
+            width: `${Math.max(0, Math.min(100, progress))}%`,
+          }}
+        />
+      </div>
+    )
   }
 
   // Format: "Chapter • 34%" or "Page X of Y • 34%" or just "34%"

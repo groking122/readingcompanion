@@ -18,7 +18,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json()
+    // Handle both JSON and blob (from sendBeacon) requests
+    let body: any
+    const contentType = request.headers.get("content-type") || ""
+    
+    if (contentType.includes("application/json")) {
+      body = await request.json()
+    } else {
+      // Handle blob from sendBeacon
+      const blob = await request.blob()
+      const text = await blob.text()
+      try {
+        body = JSON.parse(text)
+      } catch (e) {
+        return NextResponse.json(
+          { error: "Invalid request body" },
+          { status: 400 }
+        )
+      }
+    }
+    
     const { bookId, epubLocation, pageNumber, position, progressPercentage } = body
 
     if (!bookId) {

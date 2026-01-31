@@ -64,9 +64,6 @@ export function EpubReader({
     }
   }, [rendition, book]) // Don't include onRenditionReady in deps
 
-  // Throttled theme update ref
-  const throttledThemeUpdateRef = useRef<NodeJS.Timeout | null>(null)
-
   // Register EPUB themes and apply when they change using CSS variables
   useEffect(() => {
     if (!rendition) return
@@ -84,12 +81,15 @@ export function EpubReader({
       
       // Get CSS variables from parent document - use general theme colors
       const root = document.documentElement
-      const bg = getComputedStyle(root).getPropertyValue("--c-canvas").trim() || getComputedStyle(root).getPropertyValue("--background").trim() || "#ffffff"
       const fg = getComputedStyle(root).getPropertyValue("--c-ink").trim() || getComputedStyle(root).getPropertyValue("--foreground").trim() || "#111"
       
+      // Force transparent backgrounds on ALL elements for seamless theme
       style.textContent = `
+        html, body, * {
+          background-color: transparent !important;
+          background: transparent !important;
+        }
         html, body {
-          background: var(--c-canvas, var(--background, ${bg})) !important;
           color: var(--c-ink, var(--foreground, ${fg})) !important;
         }
         body * {
@@ -98,30 +98,35 @@ export function EpubReader({
         ::selection {
           background: color-mix(in srgb, var(--c-ink, var(--foreground, ${fg})) 20%, transparent) !important;
         }
-        div, section, article, p {
-          background: var(--c-canvas, var(--background, ${bg})) !important;
+        div, section, article, p, span, h1, h2, h3, h4, h5, h6 {
+          background-color: transparent !important;
+          background: transparent !important;
         }
       `
       doc.head.appendChild(style)
 
-      // Also set inline styles as fallback
+      // Also set inline styles as fallback - use transparent
       if (doc.body) {
-        doc.body.style.backgroundColor = bg
+        doc.body.style.backgroundColor = "transparent"
         doc.body.style.color = fg
+      }
+      if (doc.documentElement) {
+        doc.documentElement.style.backgroundColor = "transparent"
       }
     }
 
-    // Register epubjs themes using CSS variables
+    // Register epubjs themes using transparent backgrounds for seamless theme
     rendition.themes.register("light", {
       body: {
         "font-family": `"${fontFamily}", serif !important`,
         "font-size": `${fontSize}px !important`,
         "line-height": `${lineHeight} !important`,
-        "background-color": "var(--c-canvas, var(--background)) !important",
+        "background-color": "transparent !important",
         "color": "var(--c-ink, var(--foreground)) !important",
       },
       "*": {
         "font-family": `"${fontFamily}", serif !important`,
+        "background-color": "transparent !important",
       },
     })
     
@@ -130,11 +135,12 @@ export function EpubReader({
         "font-family": `"${fontFamily}", serif !important`,
         "font-size": `${fontSize}px !important`,
         "line-height": `${lineHeight} !important`,
-        "background-color": "var(--c-canvas, var(--background)) !important",
+        "background-color": "transparent !important",
         "color": "var(--c-ink, var(--foreground)) !important",
       },
       "*": {
         "font-family": `"${fontFamily}", serif !important`,
+        "background-color": "transparent !important",
       },
     })
     
@@ -143,11 +149,12 @@ export function EpubReader({
         "font-family": `"${fontFamily}", serif !important`,
         "font-size": `${fontSize}px !important`,
         "line-height": `${lineHeight} !important`,
-        "background-color": "var(--c-canvas, var(--background)) !important",
+        "background-color": "transparent !important",
         "color": "var(--c-ink, var(--foreground)) !important",
       },
       "*": {
         "font-family": `"${fontFamily}", serif !important`,
+        "background-color": "transparent !important",
       },
     })
 
@@ -169,74 +176,69 @@ export function EpubReader({
     }
   }, [rendition, theme])
 
-  // Throttled settings application (font size, family, line height)
+  // Instant typography updates (no throttling for real-time feedback)
   useEffect(() => {
     if (!rendition) return
 
-    // Clear pending update
-    if (throttledThemeUpdateRef.current) {
-      clearTimeout(throttledThemeUpdateRef.current)
-    }
+    // Apply theme override immediately (no throttle for instant updates)
+    rendition.themes.override({
+      body: {
+        "font-family": `"${fontFamily}", serif !important`,
+        "font-size": `${fontSize}px !important`,
+        "line-height": `${lineHeight} !important`,
+      },
+    })
 
-    // Update UI immediately (for instant feedback)
-    // But throttle actual rendition update
-    throttledThemeUpdateRef.current = setTimeout(() => {
-      // Apply theme override (not full remount)
-      rendition.themes.override({
-        body: {
-          "font-family": `"${fontFamily}", serif !important`,
-          "font-size": `${fontSize}px !important`,
-          "line-height": `${lineHeight} !important`,
-        },
-      })
+    // Re-inject CSS with transparent backgrounds immediately
+    const injectThemeStyles = () => {
+      const iframe = viewerRef.current?.querySelector("iframe")
+      if (!iframe?.contentDocument) return
 
-      // Re-inject CSS variables
-      const injectThemeStyles = () => {
-        const iframe = viewerRef.current?.querySelector("iframe")
-        if (!iframe?.contentDocument) return
+      const doc = iframe.contentDocument
+      const oldStyle = doc.getElementById("epub-theme-override")
+      if (oldStyle) oldStyle.remove()
 
-        const doc = iframe.contentDocument
-        const oldStyle = doc.getElementById("epub-theme-override")
-        if (oldStyle) oldStyle.remove()
-
-        const style = doc.createElement("style")
-        style.id = "epub-theme-override"
-        
-        const root = document.documentElement
-        const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
-        const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
-        
-        style.textContent = `
-          html, body {
-            background: var(--reader-paper, ${bg}) !important;
-            color: var(--reader-fg, ${fg}) !important;
-          }
-          body * {
-            color: var(--reader-fg, ${fg}) !important;
-          }
-          ::selection {
-            background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
-          }
-          div, section, article, p {
-            background: var(--reader-paper, ${bg}) !important;
-          }
-        `
-        doc.head.appendChild(style)
-
-        if (doc.body) {
-          doc.body.style.backgroundColor = bg
-          doc.body.style.color = fg
+      const style = doc.createElement("style")
+      style.id = "epub-theme-override"
+      
+      const root = document.documentElement
+      const fg = getComputedStyle(root).getPropertyValue("--c-ink").trim() || getComputedStyle(root).getPropertyValue("--foreground").trim() || "#111"
+      
+      // Force transparent backgrounds on ALL elements for seamless theme
+      style.textContent = `
+        html, body, * {
+          background-color: transparent !important;
+          background: transparent !important;
         }
+        html, body {
+          color: var(--c-ink, var(--foreground, ${fg})) !important;
+        }
+        body * {
+          color: var(--c-ink, var(--foreground, ${fg})) !important;
+        }
+        ::selection {
+          background: color-mix(in srgb, var(--c-ink, var(--foreground, ${fg})) 20%, transparent) !important;
+        }
+        div, section, article, p, span, h1, h2, h3, h4, h5, h6 {
+          background-color: transparent !important;
+          background: transparent !important;
+        }
+      `
+      doc.head.appendChild(style)
+
+      if (doc.body) {
+        doc.body.style.backgroundColor = "transparent"
+        doc.body.style.color = fg
       }
-
-      injectThemeStyles()
-    }, 100) // 100ms throttle
-
-    return () => {
-      if (throttledThemeUpdateRef.current) {
-        clearTimeout(throttledThemeUpdateRef.current)
+      if (doc.documentElement) {
+        doc.documentElement.style.backgroundColor = "transparent"
       }
     }
+
+    // Use requestAnimationFrame for smooth updates in the same frame
+    requestAnimationFrame(() => {
+      injectThemeStyles()
+    })
   }, [rendition, fontSize, fontFamily, lineHeight])
 
   // Re-mark unknown words when knownWords changes
@@ -331,12 +333,13 @@ export function EpubReader({
             .epub-word.selected {
               background-color: rgba(59, 130, 246, 0.4) !important;
             }
-            /* Mark saved vocabulary words subtly (only after being saved) */
+            /* Mark saved vocabulary words with background highlight (mix-blend-mode for better legibility) */
             .epub-word.unknown-word {
-              /* Very subtle highlight - only visible on close inspection */
-              background-color: rgba(147, 51, 234, 0.12) !important;
-              border-bottom: 1px solid rgba(147, 51, 234, 0.25) !important;
-              padding-bottom: 1px;
+              /* Background highlight with mix-blend-mode for better legibility */
+              background-color: rgba(147, 51, 234, 0.15) !important;
+              mix-blend-mode: multiply;
+              border-radius: 2px;
+              padding: 1px 2px;
             }
             @media (hover: hover) and (pointer: fine) {
               .epub-word.unknown-word:hover {
@@ -418,7 +421,7 @@ export function EpubReader({
           })
         }
 
-        // Function to get context around a word
+        // Function to get context around a word - extracts full sentence
         const getContextAroundWord = (wordElement: HTMLElement): string => {
           try {
             // Try to get parent paragraph or container
@@ -430,13 +433,15 @@ export function EpubReader({
             if (container) {
               const text = container.textContent || ""
               const wordText = wordElement.textContent || ""
-              const wordIndex = text.indexOf(wordText)
+              
+              // Find word index (handle case-insensitive)
+              const normalizedText = text.toLowerCase()
+              const normalizedWord = wordText.toLowerCase().trim()
+              const wordIndex = normalizedText.indexOf(normalizedWord)
               
               if (wordIndex >= 0) {
-                // Get 100 characters before and after
-                const start = Math.max(0, wordIndex - 100)
-                const end = Math.min(text.length, wordIndex + wordText.length + 100)
-                return text.substring(start, end).trim()
+                // Extract full sentence containing the word
+                return extractSentenceFromText(text, wordIndex)
               }
             }
             
@@ -445,6 +450,69 @@ export function EpubReader({
           } catch (e) {
             return wordElement.textContent || ""
           }
+        }
+
+        // Helper function to extract full sentence from text
+        const extractSentenceFromText = (text: string, wordIndex: number): string => {
+          // Find sentence boundaries (period, exclamation, question mark followed by space or end)
+          const sentenceEndRegex = /[.!?]\s+/g
+          
+          // Find the start of the sentence
+          let sentenceStart = 0
+          let lastMatch: RegExpExecArray | null = null
+          let match: RegExpExecArray | null
+          
+          sentenceEndRegex.lastIndex = 0
+          
+          while ((match = sentenceEndRegex.exec(text)) !== null) {
+            if (match.index < wordIndex) {
+              lastMatch = match
+              sentenceStart = match.index + match[0].length
+            } else {
+              break
+            }
+          }
+          
+          // If no sentence end found before word, try to find start by looking backwards
+          if (sentenceStart === 0 && lastMatch === null) {
+            for (let i = wordIndex; i >= 0; i--) {
+              if (/[.!?]\s+/.test(text.substring(Math.max(0, i - 1), i + 2))) {
+                sentenceStart = i + 2
+                break
+              }
+            }
+          }
+          
+          // Find the end of the sentence
+          let sentenceEnd = text.length
+          sentenceEndRegex.lastIndex = wordIndex
+          
+          const endMatch = sentenceEndRegex.exec(text)
+          if (endMatch) {
+            sentenceEnd = endMatch.index + endMatch[0].length - 1
+          } else {
+            // Look for sentence-ending punctuation after the word
+            for (let i = wordIndex; i < text.length; i++) {
+              if (/[.!?]/.test(text[i])) {
+                if (i === text.length - 1 || /\s/.test(text[i + 1])) {
+                  sentenceEnd = i + 1
+                  break
+                }
+              }
+            }
+          }
+          
+          // Extract the sentence
+          const sentence = text.substring(sentenceStart, sentenceEnd).trim()
+          
+          // Fallback: if sentence is too short, return larger context
+          if (sentence.length < 10) {
+            const contextStart = Math.max(0, wordIndex - 100)
+            const contextEnd = Math.min(text.length, wordIndex + 100)
+            return text.substring(contextStart, contextEnd).trim()
+          }
+          
+          return sentence
         }
 
         // Function to get word at point using caret APIs (for mobile taps)
@@ -533,14 +601,15 @@ export function EpubReader({
           return { word: "", element: null }
         }
 
-        // Function to handle word click/tap
+        // Function to handle word click/tap - one-tap translation on mobile
         const handleWordInteraction = (e: MouseEvent | TouchEvent | PointerEvent) => {
           let target: HTMLElement | null = null
           let clientX = 0
           let clientY = 0
+          const isTouch = e.type === "touchstart" || e.type === "touchend"
 
           // Handle different event types
-          if (e.type === "touchstart" || e.type === "touchend") {
+          if (isTouch) {
             const touchEvent = e as TouchEvent
             if (touchEvent.touches.length > 0 || touchEvent.changedTouches.length > 0) {
               const touch = touchEvent.touches[0] || touchEvent.changedTouches[0]
@@ -569,14 +638,21 @@ export function EpubReader({
                 el.classList.remove("selected")
               })
               
-              // Highlight clicked word
+              // Highlight clicked word immediately
               target.classList.add("selected")
               
               // Get context around the word
               const context = getContextAroundWord(target)
               
-              // Call the text selection handler with context
-              onTextSelected(cleanWord, "", context)
+              // On mobile (touch), open drawer immediately with empty translation (skeleton loader)
+              // The translation will be fetched and displayed when ready
+              if (isTouch) {
+                // Immediately trigger selection to open drawer with skeleton
+                onTextSelected(cleanWord, "", context)
+              } else {
+                // Desktop: normal flow
+                onTextSelected(cleanWord, "", context)
+              }
             }
           } else if (target && (e.type === "pointerup" || e.type === "touchend")) {
             // For mobile taps, try to get word at tap point
@@ -590,13 +666,13 @@ export function EpubReader({
                 el.classList.remove("selected")
               })
 
-              // Highlight tapped word
+              // Highlight tapped word immediately
               element.classList.add("selected")
 
               // Get context around the word
               const context = getContextAroundWord(element)
 
-              // Call the text selection handler
+              // On mobile, open drawer immediately (one-tap)
               onTextSelected(word.trim(), "", context)
             }
           }
@@ -708,7 +784,7 @@ export function EpubReader({
         cleanupFn = setupWordInteractions()
       }, 300)
       
-      // Re-inject theme styles on relocation using CSS variables
+      // Re-inject theme styles on relocation with transparent backgrounds
       const injectThemeOnRelocate = () => {
         const iframe = viewerRef.current?.querySelector("iframe")
         if (!iframe?.contentDocument) return
@@ -722,30 +798,37 @@ export function EpubReader({
         
         // Get CSS variables from parent document
         const root = document.documentElement
-        const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
-        const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+        const fg = getComputedStyle(root).getPropertyValue("--c-ink").trim() || getComputedStyle(root).getPropertyValue("--foreground").trim() || "#111"
         
+        // Force transparent backgrounds on ALL elements for seamless theme
         style.textContent = `
+          html, body, * {
+            background-color: transparent !important;
+            background: transparent !important;
+          }
           html, body {
-            background: var(--reader-paper, ${bg}) !important;
-            color: var(--reader-fg, ${fg}) !important;
+            color: var(--c-ink, var(--foreground, ${fg})) !important;
           }
           body * {
-            color: var(--reader-fg, ${fg}) !important;
+            color: var(--c-ink, var(--foreground, ${fg})) !important;
           }
           ::selection {
-            background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+            background: color-mix(in srgb, var(--c-ink, var(--foreground, ${fg})) 20%, transparent) !important;
           }
-          div, section, article, p {
-            background: var(--reader-paper, ${bg}) !important;
+          div, section, article, p, span, h1, h2, h3, h4, h5, h6 {
+            background-color: transparent !important;
+            background: transparent !important;
           }
         `
         doc.head.appendChild(style)
 
-        // Also set inline styles as fallback
+        // Also set inline styles as fallback - use transparent
         if (doc.body) {
-          doc.body.style.backgroundColor = bg
+          doc.body.style.backgroundColor = "transparent"
           doc.body.style.color = fg
+        }
+        if (doc.documentElement) {
+          doc.documentElement.style.backgroundColor = "transparent"
         }
       }
       
@@ -894,7 +977,7 @@ export function EpubReader({
       className="w-full h-full" 
       style={{ 
         position: "relative",
-        backgroundColor: `var(--c-canvas, var(--background, ${bg}))`,
+        backgroundColor: "transparent",
         color: `var(--c-ink, var(--foreground, ${fg}))`,
       }}
     >
@@ -938,11 +1021,12 @@ export function EpubReader({
               "font-family": `"${fontFamily}", serif !important`,
               "font-size": `${fontSize}px !important`,
               "line-height": `${lineHeight} !important`,
-              "background-color": "var(--reader-paper) !important",
-              "color": "var(--reader-fg) !important",
+              "background-color": "transparent !important",
+              "color": "var(--c-ink, var(--foreground)) !important",
             },
             "*": {
               "font-family": `"${fontFamily}", serif !important`,
+              "background-color": "transparent !important",
             },
           })
           
@@ -951,11 +1035,12 @@ export function EpubReader({
               "font-family": `"${fontFamily}", serif !important`,
               "font-size": `${fontSize}px !important`,
               "line-height": `${lineHeight} !important`,
-              "background-color": "var(--reader-paper) !important",
-              "color": "var(--reader-fg) !important",
+              "background-color": "transparent !important",
+              "color": "var(--c-ink, var(--foreground)) !important",
             },
             "*": {
               "font-family": `"${fontFamily}", serif !important`,
+              "background-color": "transparent !important",
             },
           })
           
@@ -964,11 +1049,12 @@ export function EpubReader({
               "font-family": `"${fontFamily}", serif !important`,
               "font-size": `${fontSize}px !important`,
               "line-height": `${lineHeight} !important`,
-              "background-color": "var(--reader-paper) !important",
-              "color": "var(--reader-fg) !important",
+              "background-color": "transparent !important",
+              "color": "var(--c-ink, var(--foreground)) !important",
             },
             "*": {
               "font-family": `"${fontFamily}", serif !important`,
+              "background-color": "transparent !important",
             },
           })
           
@@ -976,7 +1062,7 @@ export function EpubReader({
           const themeToSelect = theme === "paper" ? "light" : theme
           rend.themes.select(themeToSelect)
           
-          // Inject theme styles using CSS variables
+          // Inject theme styles with transparent backgrounds for seamless theme
           const injectTheme = () => {
             const iframe = viewerRef.current?.querySelector("iframe")
             if (!iframe?.contentDocument) return
@@ -990,30 +1076,37 @@ export function EpubReader({
             
             // Get CSS variables from parent document
             const root = document.documentElement
-            const bg = getComputedStyle(root).getPropertyValue("--reader-paper").trim() || "#ffffff"
-            const fg = getComputedStyle(root).getPropertyValue("--reader-fg").trim() || "#111"
+            const fg = getComputedStyle(root).getPropertyValue("--c-ink").trim() || getComputedStyle(root).getPropertyValue("--foreground").trim() || "#111"
             
+            // Force transparent backgrounds on ALL elements for seamless theme
             style.textContent = `
+              html, body, * {
+                background-color: transparent !important;
+                background: transparent !important;
+              }
               html, body {
-                background: var(--reader-paper, ${bg}) !important;
-                color: var(--reader-fg, ${fg}) !important;
+                color: var(--c-ink, var(--foreground, ${fg})) !important;
               }
               body * {
-                color: var(--reader-fg, ${fg}) !important;
+                color: var(--c-ink, var(--foreground, ${fg})) !important;
               }
               ::selection {
-                background: color-mix(in srgb, var(--reader-fg, ${fg}) 20%, transparent) !important;
+                background: color-mix(in srgb, var(--c-ink, var(--foreground, ${fg})) 20%, transparent) !important;
               }
-              div, section, article, p {
-                background: var(--reader-paper, ${bg}) !important;
+              div, section, article, p, span, h1, h2, h3, h4, h5, h6 {
+                background-color: transparent !important;
+                background: transparent !important;
               }
             `
             doc.head.appendChild(style)
 
-            // Also set inline styles as fallback
+            // Also set inline styles as fallback - use transparent
             if (doc.body) {
-              doc.body.style.backgroundColor = bg
+              doc.body.style.backgroundColor = "transparent"
               doc.body.style.color = fg
+            }
+            if (doc.documentElement) {
+              doc.documentElement.style.backgroundColor = "transparent"
             }
           }
           
