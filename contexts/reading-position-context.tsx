@@ -8,6 +8,7 @@ interface ReadingPositionContextValue {
   totalPages: number | null
   readingProgress: number
   currentChapter: string
+  setLocation: (loc: string | number) => void
   updateLocation: (loc: string | number) => void
   setCurrentPage: (page: number | null) => void
   setTotalPages: (pages: number | null) => void
@@ -39,6 +40,7 @@ export function ReadingPositionProvider({ children, initialLocation = 0 }: Readi
     totalPages,
     readingProgress,
     currentChapter,
+    setLocation: updateLocation,
     updateLocation,
     setCurrentPage,
     setTotalPages,
@@ -60,3 +62,6 @@ export function useReadingPositionContext() {
   }
   return context
 }
+
+// Alias for convenience
+export const useReadingPosition = useReadingPositionContext

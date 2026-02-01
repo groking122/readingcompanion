@@ -19,6 +19,18 @@ import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overla
 import { ReaderErrorBoundary } from "@/components/reader-error-boundary"
 import { ReaderThemeSync } from "@/components/reader-theme-sync"
 import { ReaderNavigation } from "@/components/reader-navigation"
+import { TextContent } from "@/components/text-content"
+import dynamic from "next/dynamic"
+
+// Dynamically import PdfViewer with SSR disabled to avoid server-side rendering issues
+const PdfViewer = dynamic(() => import("@/components/pdf-viewer").then(mod => ({ default: mod.PdfViewer })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-muted-foreground">Loading PDF viewer...</div>
+    </div>
+  ),
+})
 import { toast } from "@/lib/toast"
 import { useIsMobile } from "@/lib/hooks/use-media-query"
 import { createFingerprint, getCachedLocations, saveCachedLocations, type LayoutFingerprint } from "@/lib/epub-locations-cache"
@@ -1968,7 +1980,7 @@ export default function ReaderPage() {
       style={{
         backgroundColor: themeBgColor,
         color: themeTextColor,
-        transition: "background-color 0.2s ease, color 0.2s ease",
+        /* Transition handled by global CSS for synchronized theme changes */
       }}
     >
       {/* Sync reader theme to global theme */}
@@ -2050,13 +2062,13 @@ export default function ReaderPage() {
         style={{
           backgroundColor: themeBgColor,
           color: themeTextColor,
-          transition: "background-color 0.2s ease, color 0.2s ease",
+          /* Transition handled by global CSS for synchronized theme changes */
         }}
       >
         {/* Centered reading surface - unified theme, no white borders */}
         <div
-          ref={scrollContainerRef}
-          className={`theme-surface ${distractionFree ? "min-h-screen" : "min-h-[800px]"} overflow-auto`}
+          ref={book.type === "text" ? undefined : scrollContainerRef}
+          className={`theme-surface ${distractionFree ? "min-h-screen" : "min-h-[800px]"} ${book.type === "text" ? "" : "overflow-auto"}`}
           onMouseUp={() => {
             // Only handle mouseup for non-EPUB content
             // EPUB content handles selection via iframe events
@@ -2077,7 +2089,7 @@ export default function ReaderPage() {
             paddingBottom: distractionFree ? "2rem" : "3rem",
             backgroundColor: themeBgColor,
             color: themeTextColor,
-            transition: "background-color 0.2s ease, color 0.2s ease",
+            /* Transition handled by global CSS for synchronized theme changes */
           } as React.CSSProperties}
         >
         {book.type === "epub" ? (
@@ -2462,41 +2474,43 @@ export default function ReaderPage() {
           </ReaderErrorBoundary>
         ) : book.content ? (
           <>
-            <div
-              ref={bookContentRef}
-              id="book-content"
-              className={`reader-content-wrapper ${distractionFree ? "py-8 px-3 md:py-12 md:px-8 lg:px-16" : "p-3 sm:p-6 md:p-8"}`}
-              style={{
-                fontFamily: fontFamily.includes(" ") ? `"${fontFamily}"` : fontFamily,
-                fontSize: `${fontSize}px`,
-                lineHeight: lineHeight,
-                maxWidth: "100%", // Already constrained by parent
-                ["--para-gap" as any]: `${paragraphSpacing}rem`,
-              } as React.CSSProperties}
-            >
-              {/* Reading Mode Layout - Centered, optimal line length */}
-              <article 
-                className="text-justify select-text whitespace-pre-wrap break-words"
-                style={{
-                  fontFamily: fontFamily.includes(" ") ? `"${fontFamily}"` : fontFamily,
-                  fontSize: `${fontSize}px`,
-                  lineHeight: lineHeight,
-                }}
-              >
-                {book.content.split(/\n\s*\n/).map((paragraph, index) => (
-                  <p 
-                    key={index} 
-                    style={{
-                      marginBottom: `var(--para-gap)`,
-                    }}
-                  >
-                    {markUnknownWords(paragraph.trim(), knownWords, vocabularyWords, hasKnownWordsData)}
-                  </p>
-                ))}
-              </article>
-            </div>
+            <TextContent
+              content={book.content}
+              knownWords={knownWords}
+              vocabularyWords={vocabularyWords}
+              hasKnownWordsData={hasKnownWordsData}
+              fontSize={fontSize}
+              fontFamily={fontFamily}
+              lineHeight={lineHeight}
+              readingWidth={readingWidth}
+              paragraphSpacing={paragraphSpacing}
+              onTextSelection={() => {
+                if (book.type !== "epub") {
+                  handleTextSelection("")
+                }
+              }}
+              onLocationChange={(loc) => {
+                setLocation(loc)
+                setCurrentLocation(loc)
+              }}
+              onPageChange={(page) => setCurrentPage(page)}
+              onTotalPagesChange={(pages) => setTotalPages(pages)}
+            />
             {searchTerm && <SearchHighlight searchTerm={searchTerm} />}
           </>
+        ) : book.type === "pdf" && book.pdfUrl ? (
+          <PdfViewer
+            url={book.pdfUrl}
+            fontSize={fontSize}
+            currentPage={currentPage}
+            onPageChange={(page) => setCurrentPage(page)}
+            onTotalPagesChange={(pages) => setTotalPages(pages)}
+            onTextSelection={() => {
+              if (book.type === "pdf") {
+                handleTextSelection("")
+              }
+            }}
+          />
         ) : (
           <div className="text-center text-muted-foreground p-12">
             <p className="mb-2">No content available</p>

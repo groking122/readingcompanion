@@ -13,6 +13,7 @@ interface TranslationContextValue {
   popoverOpen: boolean
   popoverPosition: { x: number; y: number; width: number; height: number } | undefined
   selectText: (text: string, context?: string) => void
+  handleTextSelection: () => void
   setTranslation: (translation: string) => void
   setAlternativeTranslations: (alternatives: string[]) => void
   setTranslating: (translating: boolean) => void
@@ -46,6 +47,16 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
     setSelectedContext(context || text)
   }
 
+  const handleTextSelection = () => {
+    const selection = window.getSelection()
+    if (selection && selection.toString().trim().length > 0) {
+      const text = selection.toString().trim()
+      if (text.length > 0 && text.length <= 100) {
+        selectText(text)
+      }
+    }
+  }
+
   const clearSelection = () => {
     setSelectedText("")
     setTranslation("")
@@ -69,6 +80,7 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
     popoverOpen,
     popoverPosition,
     selectText,
+    handleTextSelection,
     setTranslation,
     setAlternativeTranslations,
     setTranslating,
@@ -94,3 +106,6 @@ export function useTranslationContext() {
   }
   return context
 }
+
+// Alias for convenience
+export const useTranslation = useTranslationContext

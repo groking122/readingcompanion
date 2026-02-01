@@ -20,6 +20,14 @@ interface ReaderContextValue {
   readingWidth: "comfort" | "wide"
   paragraphSpacing: number
   distractionFree: boolean
+  theme?: "light" | "dark" | "sepia" | "paper"
+  settings: {
+    fontSize: number
+    fontFamily: string
+    lineHeight: number
+    readingWidth: "comfort" | "wide"
+    paragraphSpacing: number
+  }
   setFontSize: (size: number) => void
   setFontFamily: (family: string) => void
   setLineHeight: (height: number) => void
@@ -119,6 +127,29 @@ export function ReaderProvider({ children, initialBookId }: ReaderProviderProps)
     }
   }, [book?.id, fontSize, fontFamily, lineHeight, readingWidth, paragraphSpacing, distractionFree])
 
+  // Get current theme from document
+  const [theme, setTheme] = useState<"light" | "dark" | "sepia" | "paper">("light")
+  
+  useEffect(() => {
+    // Detect theme from document
+    const detectTheme = () => {
+      if (typeof window === "undefined") return "light"
+      const root = document.documentElement
+      const canvasColor = getComputedStyle(root).getPropertyValue("--c-canvas").trim()
+      // Check if it's a dark color (simple heuristic)
+      if (canvasColor.includes("#")) {
+        const hex = canvasColor.replace("#", "")
+        const r = parseInt(hex.substring(0, 2), 16)
+        const g = parseInt(hex.substring(2, 4), 16)
+        const b = parseInt(hex.substring(4, 6), 16)
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000
+        return brightness < 128 ? "dark" : "light"
+      }
+      return root.classList.contains("dark") ? "dark" : "light"
+    }
+    setTheme(detectTheme())
+  }, [])
+
   const value: ReaderContextValue = {
     book,
     bookId,
@@ -128,6 +159,14 @@ export function ReaderProvider({ children, initialBookId }: ReaderProviderProps)
     readingWidth,
     paragraphSpacing,
     distractionFree,
+    theme,
+    settings: {
+      fontSize,
+      fontFamily,
+      lineHeight,
+      readingWidth,
+      paragraphSpacing,
+    },
     setFontSize,
     setFontFamily,
     setLineHeight,
@@ -147,3 +186,6 @@ export function useReaderContext() {
   }
   return context
 }
+
+// Alias for convenience
+export const useReader = useReaderContext

@@ -111,6 +111,7 @@ html {
     padding: 2rem;
     max-width: 100%;
     margin: 0 auto;
+    /* Theme transitions are handled globally - no need to override */
   }
 }
 
@@ -587,6 +588,7 @@ html {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
+/* Text Layer Styles - for text selection */
 .react-pdf__Page__textContent {
   opacity: 1 !important;
 }
@@ -605,8 +607,17 @@ html {
   background: rgba(59, 130, 246, 0.4) !important;
 }
 
+/* Annotation Layer Styles */
 .react-pdf__Page__annotations {
   display: none;
+}
+
+.react-pdf__Page__annotation {
+  position: absolute;
+}
+
+.react-pdf__Page__annotation--link {
+  cursor: pointer;
 }
 
 /* EPUB Reader Styles - Force theme background, no white borders */
@@ -664,41 +675,12 @@ html {
   }
 }
 
-/* Theme transitions - synchronized across major surfaces - liquid feel */
-html, body {
-  background-color: var(--c-canvas);
-  color: var(--c-ink);
-  transition:
-    background-color var(--theme-dur) var(--theme-ease),
-    color var(--theme-dur) var(--theme-ease);
-  will-change: background-color, color;
-  /* Force immediate synchronization */
-  transition-delay: 0s;
-}
-
-/* Respect reduced motion for theme transitions */
-@media (prefers-reduced-motion: reduce) {
-  html, body {
-    transition: none;
-  }
-}
-
-/* Apply theme transitions to major "surfaces" only - synchronized timing */
-.theme-surface {
-  /* Theme color transitions - must be synchronized - liquid feel */
-  transition:
-    background-color var(--theme-dur) var(--theme-ease) 0s,
-    color var(--theme-dur) var(--theme-ease) 0s,
-    border-color var(--theme-dur) var(--theme-ease) 0s,
-    fill var(--theme-dur) var(--theme-ease) 0s,
-    stroke var(--theme-dur) var(--theme-ease) 0s;
-  /* Optimize for smooth transitions */
-  will-change: background-color, color, border-color;
-}
-
-/* Override conflicting transition classes on theme surfaces - ensure synchronization */
-.theme-surface[class*="duration-"],
-.theme-surface[class*="transition-"] {
+/* Theme transitions - synchronized across ALL elements - liquid feel */
+/* Apply theme color transitions globally to ensure everything changes together */
+*,
+*::before,
+*::after {
+  /* Theme color transitions - synchronized timing for all color-related properties */
   transition:
     background-color var(--theme-dur) var(--theme-ease) 0s,
     color var(--theme-dur) var(--theme-ease) 0s,
@@ -706,30 +688,66 @@ html, body {
     box-shadow var(--theme-dur) var(--theme-ease) 0s,
     fill var(--theme-dur) var(--theme-ease) 0s,
     stroke var(--theme-dur) var(--theme-ease) 0s,
-    /* Preserve other transitions like transform, opacity for hover effects */
-    transform, opacity;
+    /* Allow other properties to use their own transitions (transform, opacity, etc.) */
+    transform 0.2s ease-out,
+    opacity 0.2s ease-out;
 }
 
-/* Exclude certain elements from transitions for better performance */
+/* Ensure theme color transitions are preserved even when Tailwind transition classes are used */
+/* This ensures theme colors always transition together, while other properties can have custom timing */
+[class*="transition-all"],
+[class*="transition-colors"] {
+  transition:
+    background-color var(--theme-dur) var(--theme-ease) 0s,
+    color var(--theme-dur) var(--theme-ease) 0s,
+    border-color var(--theme-dur) var(--theme-ease) 0s,
+    box-shadow var(--theme-dur) var(--theme-ease) 0s,
+    fill var(--theme-dur) var(--theme-ease) 0s,
+    stroke var(--theme-dur) var(--theme-ease) 0s,
+    transform 0.2s ease-out,
+    opacity 0.2s ease-out;
+}
+
+/* HTML and body use theme colors */
+html, body {
+  background-color: var(--c-canvas);
+  color: var(--c-ink);
+}
+
+/* Respect reduced motion for theme transitions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+  
+  html, body {
+    transition: none !important;
+  }
+}
+
+/* Explicitly exclude certain elements from transitions for better performance */
 svg, img, canvas, video, iframe, [data-no-transition] {
   transition: none !important;
 }
 
-/* Smooth theme button transition - optimized for speed */
+/* Theme button - use same theme transition timing but allow faster interaction feedback */
 button[aria-label*="theme"], 
 button[aria-label*="Toggle theme"],
 button[title*="theme"],
 button[title*="Toggle theme"] {
-  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), 
-              transform 150ms cubic-bezier(0.4, 0, 0.2, 1), 
-              color 150ms cubic-bezier(0.4, 0, 0.2, 1), 
-              opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--theme-dur) var(--theme-ease) 0s,
+    color var(--theme-dur) var(--theme-ease) 0s,
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1), 
+    opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: background-color, transform, color, opacity;
 }
 
-/* Optimize card transitions */
+/* Optimize card transitions - ensure theme colors still transition */
 .card, [class*="Card"] {
-  will-change: transform, box-shadow;
+  will-change: transform, box-shadow, background-color, color, border-color;
 }
 
 /* Reduce motion for users who prefer it */
